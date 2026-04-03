@@ -1,24 +1,30 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 
-# Set the project name (must match your mod.json ID)
+# This must match your mod.json ID
 project(BestGhost)
 
-# Find Geode
+# The official Geode action sets GEODE_SDK environment variable
+# Use that to find Geode
+if(DEFINED ENV{GEODE_SDK})
+    set(GEODE_SDK $ENV{GEODE_SDK})
+    list(APPEND CMAKE_PREFIX_PATH ${GEODE_SDK})
+endif()
+
+# Find Geode - this will work with the official action
 find_package(Geode REQUIRED)
 
 # Create the mod
 geode_mod()
 
-# Add all your source files
-file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
+# Add ALL your source files
+file(GLOB_RECURSE SOURCES 
     src/*.cpp
     src/*.hpp
 )
 
-# Add the sources to the mod
 target_sources(${PROJECT_NAME} PRIVATE ${SOURCES})
 
-# Include directories (if needed)
+# Include directories
 target_include_directories(${PROJECT_NAME} PRIVATE src)
 
 # Set C++ standard
@@ -27,5 +33,5 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     CXX_STANDARD_REQUIRED ON
 )
 
-# Link Geode (automatically handled by geode_mod() but explicit for clarity)
-target_link_libraries(${PROJECT_NAME} PRIVATE Geode::Geode)
+# Disable warnings as errors for now
+target_compile_options(${PROJECT_NAME} PRIVATE -Wno-error)

@@ -11,8 +11,6 @@ endif()
 
 include(${GEODE_CMAKE}/GeodeMacros.cmake)
 
-geode_mod()
-
 file(GLOB_RECURSE SOURCES src/*.cpp)
 target_sources(${PROJECT_NAME} PRIVATE ${SOURCES})
 

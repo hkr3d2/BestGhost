@@ -1,14 +1,12 @@
 #include "PlayLayerHook.hpp"
 #include "../GhostManager.hpp"
 #include "../GhostRenderer.hpp"
-#include <Geode/modify/PlayLayer.hpp>
-#include <Geode/utils/cocos.hpp>
 
-bool PlayLayer::init(GJGameLevel* level) {
-    if (!PlayLayer::init(level)) return false;
+bool PlayLayer::init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
+    if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
     
     // Set current level in GhostManager
-    GhostManager::get().setCurrentLevel(level->m_levelID.value_or("unknown"));
+    GhostManager::get().setCurrentLevel(level->m_levelID.unwrap());
     
     // Start recording a new attempt
     startRecordingAttempt();
@@ -17,8 +15,8 @@ bool PlayLayer::init(GJGameLevel* level) {
 }
 
 void PlayLayer::startRecordingAttempt() {
-    m_isRecording = true;
-    m_lastRecordedTime = 0;
+    m_fields->m_isRecording = true;
+    m_fields->m_lastRecordedTime = 0;
     GhostManager::get().startRecording();
     
     // If racing mode is enabled, start the ghost renderer
@@ -26,14 +24,14 @@ void PlayLayer::startRecordingAttempt() {
         auto* activeGhost = GhostManager::get().getActiveGhost();
         if (activeGhost) {
             GhostRenderer::get().setGhost(activeGhost);
-            GhostRenderer::get().start(this->m_gameState.m_currentTime);
+            GhostRenderer::get().start(m_gameState.m_time);
         }
     }
 }
 
 void PlayLayer::stopRecordingAttempt(float percentage) {
-    if (!m_isRecording) return;
-    m_isRecording = false;
+    if (!m_fields->m_isRecording) return;
+    m_fields->m_isRecording = false;
     GhostManager::get().stopRecording(percentage);
     
     // Stop ghost renderer
@@ -41,14 +39,14 @@ void PlayLayer::stopRecordingAttempt(float percentage) {
 }
 
 void PlayLayer::recordCurrentFrame() {
-    if (!m_isRecording) return;
+    if (!m_fields->m_isRecording) return;
     if (!m_player1) return;
     
-    float currentTime = m_gameState.m_currentTime;
+    float currentTime = m_gameState.m_time;
     
     // Record every frame (or throttle to every 1/60th of a second)
-    if (currentTime - m_lastRecordedTime < 0.016f) return;
-    m_lastRecordedTime = currentTime;
+    if (currentTime - m_fields->m_lastRecordedTime < 0.016f) return;
+    m_fields->m_lastRecordedTime = currentTime;
     
     PlayerObject* player = m_player1;
     CCPoint pos = player->getPosition();
@@ -62,6 +60,46 @@ void PlayLayer::recordCurrentFrame() {
 }
 
 void PlayLayer::update(float dt) {
+    PlayLayer::update(dt);
+    
+    // Record current frame for ghost saving
+    recordCurrentFrame();
+    
+    // Update ghost racing
+    updateGhostRacing(dt);
+}
+
+void PlayLayer::updateGhostRacing(float dt) {
+    if (!GhostManager::get().isRacing()) return;
+    if (!GhostRenderer::get().isActive()) return;
+    
+    float currentTime = m_gameState.m_time;
+    GhostRenderer::get().update(currentTime);
+}
+
+void PlayLayer::destroyPlayer(PlayerObject* player, GameObject* object) {
+    // Get current percentage before death
+    float percentage = m_gameState.m_percentage;
+    
+    // Stop recording and save if this was a new best
+    stopRecordingAttempt(percentage);
+    
+    PlayLayer::destroyPlayer(player, object);
+}
+
+void PlayLayer::resetLevel() {
+    // Start a fresh recording on reset
+    startRecordingAttempt();
+    
+    PlayLayer::resetLevel();
+}
+
+void PlayLayer::levelComplete() {
+    // Save the completion ghost (100%)
+    stopRecordingAttempt(100.0f);
+    
+    PlayLayer::levelComplete();
+}void PlayLayer::update(float dt) {
     PlayLayer::update(dt);
     
     // Record current frame for ghost saving

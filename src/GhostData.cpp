@@ -5,10 +5,8 @@ bool GhostData::saveToFile(const std::string& path) {
     std::ofstream file(path, std::ios::binary);
     if (!file.is_open()) return false;
     
-    // Write level ID length and string
-    uint32_t idLen = levelID.size();
-    file.write(reinterpret_cast<const char*>(&idLen), sizeof(idLen));
-    file.write(levelID.c_str(), idLen);
+    // Write level ID
+    file.write(reinterpret_cast<const char*>(&levelID), sizeof(levelID));
     
     // Write percentage
     file.write(reinterpret_cast<const char*>(&percentage), sizeof(percentage));
@@ -28,10 +26,7 @@ std::optional<GhostData> GhostData::loadFromFile(const std::string& path) {
     GhostData data;
     
     // Read level ID
-    uint32_t idLen;
-    file.read(reinterpret_cast<char*>(&idLen), sizeof(idLen));
-    data.levelID.resize(idLen);
-    file.read(&data.levelID[0], idLen);
+    file.read(reinterpret_cast<char*>(&data.levelID), sizeof(data.levelID));
     
     // Read percentage
     file.read(reinterpret_cast<char*>(&data.percentage), sizeof(data.percentage));

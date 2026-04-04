@@ -5,28 +5,28 @@
 using namespace geode::prelude;
 
 bool GhostData::saveToFile(const std::string& path) {
-    auto json = matjson::Object();
+    auto json = matjson::makeObject();
     json["levelID"] = levelID;
     json["percentage"] = percentage;
     json["timestamp"] = timestamp;
     json["attemptsAtSave"] = attemptsAtSave;
     
-    auto framesArray = matjson::Array();
+    auto framesArray = matjson::makeArray();
     for (const auto& frame : frames) {
-        framesArray.push_back(matjson::Object{
+        framesArray.push_back(matjson::makeObject({
             {"x", frame.x},
             {"y", frame.y},
             {"rotation", frame.rotation},
             {"isHolding", frame.isHolding},
             {"gameMode", frame.gameMode},
             {"timeOffset", frame.timeOffset}
-        });
+        }));
     }
     json["frames"] = framesArray;
     
     std::ofstream file(path);
     if (!file.is_open()) return false;
-    file << matjson::serialize(json);
+    file << json.dump();
     return true;
 }
 
@@ -39,19 +39,20 @@ std::optional<GhostData> GhostData::loadFromFile(const std::string& path) {
     if (!json.isObject()) return std::nullopt;
     
     GhostData data;
-    data.levelID = json["levelID"].asString();
-    data.percentage = json["percentage"].asDouble();
-    data.timestamp = json["timestamp"].asString();
-    data.attemptsAtSave = json["attemptsAtSave"].asInt();
+    data.levelID = json["levelID"].asString().unwrapOr("");
+    data.percentage = json["percentage"].asDouble().unwrapOr(0.0);
+    data.timestamp = json["timestamp"].asString().unwrapOr("");
+    data.attemptsAtSave = json["attemptsAtSave"].asInt().unwrapOr(0);
     
-    for (const auto& frameJson : json["frames"].asArray()) {
+    auto framesArray = json["frames"].asArray().unwrapOr(matjson::Array());
+    for (const auto& frameJson : framesArray) {
         GhostFrame frame;
-        frame.x = frameJson["x"].asDouble();
-        frame.y = frameJson["y"].asDouble();
-        frame.rotation = frameJson["rotation"].asDouble();
-        frame.isHolding = frameJson["isHolding"].asBool();
-        frame.gameMode = frameJson["gameMode"].asInt();
-        frame.timeOffset = frameJson["timeOffset"].asDouble();
+        frame.x = frameJson["x"].asDouble().unwrapOr(0.0);
+        frame.y = frameJson["y"].asDouble().unwrapOr(0.0);
+        frame.rotation = frameJson["rotation"].asDouble().unwrapOr(0.0);
+        frame.isHolding = frameJson["isHolding"].asBool().unwrapOr(false);
+        frame.gameMode = frameJson["gameMode"].asInt().unwrapOr(0);
+        frame.timeOffset = frameJson["timeOffset"].asDouble().unwrapOr(0.0);
         data.frames.push_back(frame);
     }
     

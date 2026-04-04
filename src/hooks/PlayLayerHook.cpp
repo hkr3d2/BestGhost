@@ -6,7 +6,7 @@ bool PlayLayer::init(GJGameLevel* level, bool useReplay, bool dontCreateObjects)
     if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
     
     // Set current level in GhostManager
-    GhostManager::get().setCurrentLevel(level->m_levelID);
+    GhostManager::get().setCurrentLevel(std::to_string(level->m_levelID));
     
     // Start recording a new attempt
     this->startRecordingAttempt();

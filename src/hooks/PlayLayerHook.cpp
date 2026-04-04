@@ -6,20 +6,21 @@ using namespace geode::prelude;
 class $modify(PlayLayer) {
     struct Fields {
         float m_bestPercentage = 0;
-        float m_levelLength = 0;
+        float m_farthestX = 0;
+        bool m_hasStarted = false;
+        int m_lastNotifiedPercent = 0;
     };
     
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
         
-        // Get level length (the X position where the level ends)
-        // This is typically the last object's X position
-        if (m_level) {
-            // Try to get level length from the level object
-            // If this doesn't work, we'll calculate it dynamically
-            m_fields->m_levelLength = 100000; // Fallback value
-            log::info("Best Ghost: Level loaded - {}", level->m_levelName);
-        }
+        // Reset tracking
+        m_fields->m_bestPercentage = 0;
+        m_fields->m_farthestX = 0;
+        m_fields->m_hasStarted = false;
+        m_fields->m_lastNotifiedPercent = 0;
+        
+        log::info("Best Ghost: Level loaded - {}", level->m_levelName);
         
         return true;
     }
@@ -30,19 +31,19 @@ class $modify(PlayLayer) {
         // Get player's X position
         float playerX = m_player1->getPositionX();
         
-        // Calculate percentage based on level length
-        // Most Geometry Dash levels end around X position 100000-200000
-        // We'll use a dynamic approach: track the farthest X reached
-        static float farthestX = 0;
+        // Ignore positions before the player actually starts moving (X < 100)
+        if (playerX < 100) return 0;
         
-        if (playerX > farthestX) {
-            farthestX = playerX;
+        // Track farthest X reached
+        if (playerX > m_fields->m_farthestX) {
+            m_fields->m_farthestX = playerX;
+            m_fields->m_hasStarted = true;
         }
         
-        // Estimate percentage based on farthest X
-        // A typical extreme demon might end at ~150000
-        // This is an approximation - we can improve it later
-        float estimatedPercent = (farthestX / 150000.0f) * 100.0f;
+        // Calculate percentage based on farthest X
+        // Most levels end around 80000-150000
+        // Using 100000 as a rough estimate
+        float estimatedPercent = (m_fields->m_farthestX / 100000.0f) * 100.0f;
         if (estimatedPercent > 100) estimatedPercent = 100;
         
         return estimatedPercent;
@@ -58,24 +59,43 @@ class $modify(PlayLayer) {
         // Check if this is a new best
         if (currentPercent > m_fields->m_bestPercentage) {
             m_fields->m_bestPercentage = currentPercent;
+            
+            // Log every new best
             log::info("Best Ghost: New best! {:.1f}%", currentPercent);
             
-            // Show notification every 10% for testing
+            // Show notification every 10% using FLAlert (more reliable)
             int intPercent = static_cast<int>(currentPercent);
-            if (intPercent % 10 == 0) {
-                Notification::create(fmt::format("Progress: {}%", intPercent), NotificationIcon::Info)->show();
+            if (intPercent >= m_fields->m_lastNotifiedPercent + 10) {
+                m_fields->m_lastNotifiedPercent = intPercent - (intPercent % 10);
+                
+                // Use FLAlert instead of Notification
+                FLAlertLayer::create(
+                    "Best Ghost",
+                    fmt::format("New best: {}%", m_fields->m_lastNotifiedPercent),
+                    "OK"
+                )->show();
             }
         }
     }
     
     void destroyPlayer(PlayerObject* player, GameObject* object) {
-        log::info("Best Ghost: Died at {:.1f}%", m_fields->m_bestPercentage);
+        // Only log if we actually made progress (X > 100)
+        if (m_fields->m_hasStarted && m_fields->m_bestPercentage > 0) {
+            log::info("Best Ghost: Died at {:.1f}%", m_fields->m_bestPercentage);
+        }
+        
         PlayLayer::destroyPlayer(player, object);
     }
     
     void levelComplete() {
         log::info("Best Ghost: Level completed at 100%!");
-        Notification::create("Level Completed!", NotificationIcon::Success)->show();
+        
+        FLAlertLayer::create(
+            "Best Ghost",
+            "Level completed!",
+            "OK"
+        )->show();
+        
         PlayLayer::levelComplete();
     }
 };

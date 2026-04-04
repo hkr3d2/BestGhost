@@ -5,17 +5,17 @@
 using namespace geode::prelude;
 
 class $modify(PauseLayer) {
-public:
-    void onToggleRace(CCObject* sender);
-    void onSelectGhost(CCObject* sender);
+    struct Fields {
+        CCMenuItemToggler* m_raceToggle = nullptr;
+        CCLabelBMFont* m_selectedGhostLabel = nullptr;
+    };
     
-    // Hooked methods
-    bool init();
+public:
+    bool init(bool unfocused);
     void onResume(CCObject* sender);
     
-private:
-    CCMenuItemToggler* m_raceToggle = nullptr;
-    CCLabelBMFont* m_selectedGhostLabel = nullptr;
+    void onToggleRace(CCObject* sender);
+    void onSelectGhost(CCObject* sender);
     
     void addRaceControls();
     void updateSelectedGhostLabel();

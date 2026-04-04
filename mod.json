@@ -12,7 +12,7 @@
     "developer": "hkr3d2",
     "description": "Race against your personal best ghosts in Geometry Dash",
     "tags": ["gameplay", "practice"],
-    "dependencies": [],
+    "dependencies": {},
     "settings": {
         "ghost-opacity": {
             "name": "Ghost Opacity",

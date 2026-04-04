@@ -1,19 +1,19 @@
 #include "GhostData.hpp"
+#include <Geode/Geode.hpp>
 #include <fstream>
-#include <Geode/loader/JsonValidation.hpp>
 
-using json = nlohmann::json;
+using namespace geode::prelude;
 
 bool GhostData::saveToFile(const std::string& path) {
-    json j;
-    j["levelID"] = levelID;
-    j["percentage"] = percentage;
-    j["timestamp"] = timestamp;
-    j["attemptsAtSave"] = attemptsAtSave;
+    auto json = matjson::Object();
+    json["levelID"] = levelID;
+    json["percentage"] = percentage;
+    json["timestamp"] = timestamp;
+    json["attemptsAtSave"] = attemptsAtSave;
     
-    json framesArray = json::array();
+    auto framesArray = matjson::Array();
     for (const auto& frame : frames) {
-        framesArray.push_back({
+        framesArray.push_back(matjson::Object{
             {"x", frame.x},
             {"y", frame.y},
             {"rotation", frame.rotation},
@@ -22,11 +22,11 @@ bool GhostData::saveToFile(const std::string& path) {
             {"timeOffset", frame.timeOffset}
         });
     }
-    j["frames"] = framesArray;
+    json["frames"] = framesArray;
     
     std::ofstream file(path);
     if (!file.is_open()) return false;
-    file << j.dump(4);
+    file << matjson::serialize(json);
     return true;
 }
 
@@ -34,23 +34,24 @@ std::optional<GhostData> GhostData::loadFromFile(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) return std::nullopt;
     
-    json j;
-    file >> j;
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    auto json = matjson::parse(content);
+    if (!json.isObject()) return std::nullopt;
     
     GhostData data;
-    data.levelID = j["levelID"];
-    data.percentage = j["percentage"];
-    data.timestamp = j["timestamp"];
-    data.attemptsAtSave = j["attemptsAtSave"];
+    data.levelID = json["levelID"].asString();
+    data.percentage = json["percentage"].asDouble();
+    data.timestamp = json["timestamp"].asString();
+    data.attemptsAtSave = json["attemptsAtSave"].asInt();
     
-    for (const auto& frameJson : j["frames"]) {
+    for (const auto& frameJson : json["frames"].asArray()) {
         GhostFrame frame;
-        frame.x = frameJson["x"];
-        frame.y = frameJson["y"];
-        frame.rotation = frameJson["rotation"];
-        frame.isHolding = frameJson["isHolding"];
-        frame.gameMode = frameJson["gameMode"];
-        frame.timeOffset = frameJson["timeOffset"];
+        frame.x = frameJson["x"].asDouble();
+        frame.y = frameJson["y"].asDouble();
+        frame.rotation = frameJson["rotation"].asDouble();
+        frame.isHolding = frameJson["isHolding"].asBool();
+        frame.gameMode = frameJson["gameMode"].asInt();
+        frame.timeOffset = frameJson["timeOffset"].asDouble();
         data.frames.push_back(frame);
     }
     
@@ -58,7 +59,5 @@ std::optional<GhostData> GhostData::loadFromFile(const std::string& path) {
 }
 
 std::string GhostData::getFilename(float percentage) {
-    // Replace decimal with underscore for filename safety
-    std::string pctStr = std::to_string(static_cast<int>(percentage));
-    return pctStr + "_percent.ghost";
+    return fmt::format("{}_percent.ghost", static_cast<int>(percentage));
 }

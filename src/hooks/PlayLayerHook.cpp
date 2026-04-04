@@ -18,11 +18,12 @@ class $modify(PlayLayer) {
         // Start recording
         m_fields->m_isRecording = true;
         m_fields->m_currentRecording.clear();
-        m_fields->m_startTime = m_gameState.m_time;
+        m_fields->m_startTime = this->m_gameState.m_time;
         
         // Load best percentage for this level
         auto saveDir = Mod::get()->getSaveDir();
-        auto bestPath = saveDir / (level->m_levelID + "_best.bin");
+        std::string levelId = std::to_string(level->m_levelID);
+        auto bestPath = saveDir / (levelId + "_best.bin");
         
         if (std::filesystem::exists(bestPath)) {
             auto data = GhostData::loadFromFile(bestPath.string());
@@ -43,8 +44,8 @@ class $modify(PlayLayer) {
         if (!m_fields->m_isRecording) return;
         if (!m_player1) return;
         
-        float currentTime = m_gameState.m_time;
-        float currentPercent = m_gameState.m_percentage;
+        float currentTime = this->m_gameState.m_time;
+        float currentPercent = this->m_gameState.m_percentage;
         
         // Record frame every ~1/60 second
         static float lastRecordTime = 0;
@@ -56,8 +57,8 @@ class $modify(PlayLayer) {
             frame.y = m_player1->getPositionY();
             frame.rotation = m_player1->getRotation();
             frame.timeOffset = currentTime - m_fields->m_startTime;
-            frame.isHolding = m_player1->m_isHolding;
-            frame.gameMode = static_cast<int>(m_gameState.m_gameMode);
+            frame.isHolding = m_player1->m_bIsHolding;
+            frame.gameMode = static_cast<int>(this->m_gameState.m_eGameMode);
             
             m_fields->m_currentRecording.push_back(frame);
         }
@@ -70,17 +71,18 @@ class $modify(PlayLayer) {
     }
     
     void destroyPlayer(PlayerObject* player, GameObject* object) {
-        float finalPercent = m_gameState.m_percentage;
+        float finalPercent = this->m_gameState.m_percentage;
         
         // Save if this was a new best
         if (finalPercent > m_fields->m_bestPercentage && !m_fields->m_currentRecording.empty()) {
             GhostData data;
-            data.levelID = m_level->m_levelID;
+            std::string levelId = std::to_string(m_level->m_levelID);
+            data.levelID = levelId;
             data.percentage = finalPercent;
             data.frames = m_fields->m_currentRecording;
             
             auto saveDir = Mod::get()->getSaveDir();
-            auto bestPath = saveDir / (data.levelID + "_best.bin");
+            auto bestPath = saveDir / (levelId + "_best.bin");
             
             if (data.saveToFile(bestPath.string())) {
                 log::info("Best Ghost: Saved new best at {}%", finalPercent);
@@ -96,12 +98,13 @@ class $modify(PlayLayer) {
         // Save 100% completion
         if (!m_fields->m_currentRecording.empty()) {
             GhostData data;
-            data.levelID = m_level->m_levelID;
+            std::string levelId = std::to_string(m_level->m_levelID);
+            data.levelID = levelId;
             data.percentage = 100.0f;
             data.frames = m_fields->m_currentRecording;
             
             auto saveDir = Mod::get()->getSaveDir();
-            auto bestPath = saveDir / (data.levelID + "_best.bin");
+            auto bestPath = saveDir / (levelId + "_best.bin");
             data.saveToFile(bestPath.string());
             
             log::info("Best Ghost: Level completed! Saved 100% ghost");

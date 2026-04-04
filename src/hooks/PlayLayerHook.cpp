@@ -25,49 +25,44 @@ class $modify(PlayLayer) {
         return true;
     }
     
-    float getCurrentPercentage() {
-        if (!m_player1) return 0;
-        
-        // Get player's X position
-        float playerX = m_player1->getPositionX();
-        
-        // Ignore positions before the player actually starts moving (X < 100)
-        if (playerX < 100) return 0;
-        
-        // Track farthest X reached
-        if (playerX > m_fields->m_farthestX) {
-            m_fields->m_farthestX = playerX;
-            m_fields->m_hasStarted = true;
-        }
-        
-        // Calculate percentage based on farthest X
-        float estimatedPercent = (m_fields->m_farthestX / 100000.0f) * 100.0f;
-        if (estimatedPercent > 100) estimatedPercent = 100;
-        
-        return estimatedPercent;
-    }
-    
     void update(float dt) {
+        // Call parent update FIRST
         PlayLayer::update(dt);
         
         if (!m_player1) return;
         
-        float currentPercent = getCurrentPercentage();
+        // Get player's X position directly every frame
+        float playerX = m_player1->getPositionX();
         
-        // Check if this is a new best
-        if (currentPercent > m_fields->m_bestPercentage) {
-            m_fields->m_bestPercentage = currentPercent;
+        // Ignore positions before the player actually starts moving (X < 100)
+        if (playerX < 100) return;
+        
+        // Mark that we've started
+        if (!m_fields->m_hasStarted) {
+            m_fields->m_hasStarted = true;
+            log::info("Best Ghost: Player started moving!");
+        }
+        
+        // Track farthest X reached
+        if (playerX > m_fields->m_farthestX) {
+            m_fields->m_farthestX = playerX;
             
-            // Log every new best
-            log::info("Best Ghost: New best! {:.1f}%", currentPercent);
+            // Calculate percentage based on farthest X
+            // Most levels end around 80000-150000
+            float estimatedPercent = (m_fields->m_farthestX / 100000.0f) * 100.0f;
+            if (estimatedPercent > 100) estimatedPercent = 100;
             
-            // Show notification every 10%
-            int intPercent = static_cast<int>(currentPercent);
-            if (intPercent >= m_fields->m_lastNotifiedPercent + 10) {
-                m_fields->m_lastNotifiedPercent = intPercent - (intPercent % 10);
-                
-                // Use a simple log instead of popup for now (popups can cause issues)
-                log::info("Best Ghost: Milestone reached - {}%", m_fields->m_lastNotifiedPercent);
+            // Log when we reach new milestones
+            int intPercent = static_cast<int>(estimatedPercent);
+            if (intPercent > m_fields->m_lastNotifiedPercent) {
+                m_fields->m_lastNotifiedPercent = intPercent;
+                log::info("Best Ghost: Progress - X: {:.0f}, Estimated: {}%", 
+                          m_fields->m_farthestX, intPercent);
+            }
+            
+            // Update best percentage
+            if (estimatedPercent > m_fields->m_bestPercentage) {
+                m_fields->m_bestPercentage = estimatedPercent;
             }
         }
     }
@@ -86,9 +81,13 @@ class $modify(PlayLayer) {
     }
     
     void levelComplete() {
-        log::info("Best Ghost: LEVEL COMPLETED at 100%!");
-        log::info("Best Ghost: Final stats - Best: {:.1f}%, Farthest X: {:.0f}", 
-                  m_fields->m_bestPercentage, m_fields->m_farthestX);
+        // Get final position
+        float finalX = m_player1 ? m_player1->getPositionX() : 0;
+        
+        log::info("Best Ghost: LEVEL COMPLETED!");
+        log::info("Best Ghost: Final X position: {:.0f}", finalX);
+        log::info("Best Ghost: Best percentage during run: {:.1f}%", m_fields->m_bestPercentage);
+        log::info("Best Ghost: Farthest X reached: {:.0f}", m_fields->m_farthestX);
         
         // Call the original levelComplete
         PlayLayer::levelComplete();

@@ -1,11 +1,11 @@
 #pragma once
 #include <Geode/Geode.hpp>
 #include <Geode/ui/Popup.hpp>
-#include "GhostData.hpp"
+#include "../GhostData.hpp"  // Changed from "GhostData.hpp"
 
 using namespace geode::prelude;
 
-class GhostLibraryPopup : public Popup<>, public geode::Popup<> {
+class GhostLibraryPopup : public Popup<> {
 protected:
     bool setup(bool selectionMode) override;
     

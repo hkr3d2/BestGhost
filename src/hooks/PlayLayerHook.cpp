@@ -41,8 +41,6 @@ class $modify(PlayLayer) {
         }
         
         // Calculate percentage based on farthest X
-        // Most levels end around 80000-150000
-        // Using 100000 as a rough estimate
         float estimatedPercent = (m_fields->m_farthestX / 100000.0f) * 100.0f;
         if (estimatedPercent > 100) estimatedPercent = 100;
         
@@ -63,39 +61,36 @@ class $modify(PlayLayer) {
             // Log every new best
             log::info("Best Ghost: New best! {:.1f}%", currentPercent);
             
-            // Show notification every 10% using FLAlert (more reliable)
+            // Show notification every 10%
             int intPercent = static_cast<int>(currentPercent);
             if (intPercent >= m_fields->m_lastNotifiedPercent + 10) {
                 m_fields->m_lastNotifiedPercent = intPercent - (intPercent % 10);
                 
-                // Use FLAlert instead of Notification
-                FLAlertLayer::create(
-                    "Best Ghost",
-                    fmt::format("New best: {}%", m_fields->m_lastNotifiedPercent),
-                    "OK"
-                )->show();
+                // Use a simple log instead of popup for now (popups can cause issues)
+                log::info("Best Ghost: Milestone reached - {}%", m_fields->m_lastNotifiedPercent);
             }
         }
     }
     
     void destroyPlayer(PlayerObject* player, GameObject* object) {
-        // Only log if we actually made progress (X > 100)
-        if (m_fields->m_hasStarted && m_fields->m_bestPercentage > 0) {
-            log::info("Best Ghost: Died at {:.1f}%", m_fields->m_bestPercentage);
+        // Always log deaths with useful info
+        if (m_fields->m_hasStarted) {
+            log::info("Best Ghost: DIED at {:.1f}% (farthest X: {:.0f})", 
+                      m_fields->m_bestPercentage, m_fields->m_farthestX);
+        } else {
+            log::info("Best Ghost: DIED at start (no progress made)");
         }
         
+        // Call the original destroyPlayer
         PlayLayer::destroyPlayer(player, object);
     }
     
     void levelComplete() {
-        log::info("Best Ghost: Level completed at 100%!");
+        log::info("Best Ghost: LEVEL COMPLETED at 100%!");
+        log::info("Best Ghost: Final stats - Best: {:.1f}%, Farthest X: {:.0f}", 
+                  m_fields->m_bestPercentage, m_fields->m_farthestX);
         
-        FLAlertLayer::create(
-            "Best Ghost",
-            "Level completed!",
-            "OK"
-        )->show();
-        
+        // Call the original levelComplete
         PlayLayer::levelComplete();
     }
 };

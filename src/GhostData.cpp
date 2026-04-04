@@ -1,6 +1,6 @@
 #include "GhostData.hpp"
 #include <fstream>
-#include <nlohmann/json.hpp>
+#include <Geode/loader/JsonValidation.hpp>
 
 using json = nlohmann::json;
 

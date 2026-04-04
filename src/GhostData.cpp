@@ -5,22 +5,22 @@
 using namespace geode::prelude;
 
 bool GhostData::saveToFile(const std::string& path) {
-    auto json = matjson::makeObject();
+    auto json = matjson::Object();
     json["levelID"] = levelID;
     json["percentage"] = percentage;
     json["timestamp"] = timestamp;
     json["attemptsAtSave"] = attemptsAtSave;
     
-    auto framesArray = matjson::makeArray();
+    auto framesArray = matjson::Array();
     for (const auto& frame : frames) {
-        framesArray.push_back(matjson::makeObject({
+        framesArray.push_back(matjson::Object{
             {"x", frame.x},
             {"y", frame.y},
             {"rotation", frame.rotation},
             {"isHolding", frame.isHolding},
             {"gameMode", frame.gameMode},
             {"timeOffset", frame.timeOffset}
-        }));
+        });
     }
     json["frames"] = framesArray;
     
@@ -39,20 +39,20 @@ std::optional<GhostData> GhostData::loadFromFile(const std::string& path) {
     if (!json.isObject()) return std::nullopt;
     
     GhostData data;
-    data.levelID = json["levelID"].asString().unwrapOr("");
-    data.percentage = json["percentage"].asDouble().unwrapOr(0.0);
-    data.timestamp = json["timestamp"].asString().unwrapOr("");
-    data.attemptsAtSave = json["attemptsAtSave"].asInt().unwrapOr(0);
+    data.levelID = json["levelID"].asString().value();
+    data.percentage = json["percentage"].asDouble().value();
+    data.timestamp = json["timestamp"].asString().value();
+    data.attemptsAtSave = json["attemptsAtSave"].asInt().value();
     
-    auto framesArray = json["frames"].asArray().unwrapOr(matjson::Array());
+    auto framesArray = json["frames"].asArray().value();
     for (const auto& frameJson : framesArray) {
         GhostFrame frame;
-        frame.x = frameJson["x"].asDouble().unwrapOr(0.0);
-        frame.y = frameJson["y"].asDouble().unwrapOr(0.0);
-        frame.rotation = frameJson["rotation"].asDouble().unwrapOr(0.0);
-        frame.isHolding = frameJson["isHolding"].asBool().unwrapOr(false);
-        frame.gameMode = frameJson["gameMode"].asInt().unwrapOr(0);
-        frame.timeOffset = frameJson["timeOffset"].asDouble().unwrapOr(0.0);
+        frame.x = frameJson["x"].asDouble().value();
+        frame.y = frameJson["y"].asDouble().value();
+        frame.rotation = frameJson["rotation"].asDouble().value();
+        frame.isHolding = frameJson["isHolding"].asBool().value();
+        frame.gameMode = frameJson["gameMode"].asInt().value();
+        frame.timeOffset = frameJson["timeOffset"].asDouble().value();
         data.frames.push_back(frame);
     }
     
@@ -61,4 +61,4 @@ std::optional<GhostData> GhostData::loadFromFile(const std::string& path) {
 
 std::string GhostData::getFilename(float percentage) {
     return fmt::format("{}_percent.ghost", static_cast<int>(percentage));
-}
+}}

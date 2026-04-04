@@ -5,16 +5,17 @@
 using namespace geode::prelude;
 
 class $modify(LevelInfoLayer) {
-public:
-    void onGhostLibrary(CCObject* sender);
+    struct Fields {
+        CCMenuItemSpriteExtra* m_ghostLibraryBtn = nullptr;
+    };
     
-    // Hooked methods
-    bool init(GJGameLevel* level);
+public:
+    bool init(GJGameLevel* level, bool challenge);
     void onPlay(CCObject* sender);
     void onPracticeMode(CCObject* sender);
     
-private:
-    CCMenuItemSpriteExtra* m_ghostLibraryBtn = nullptr;
+    void onGhostLibrary(CCObject* sender);
+    
     void addGhostLibraryButton();
     void refreshGhostButton();
 };

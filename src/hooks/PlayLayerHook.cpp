@@ -6,10 +6,10 @@ bool PlayLayer::init(GJGameLevel* level, bool useReplay, bool dontCreateObjects)
     if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
     
     // Set current level in GhostManager
-    GhostManager::get().setCurrentLevel(level->m_levelID.unwrap());
+    GhostManager::get().setCurrentLevel(level->m_levelID);
     
     // Start recording a new attempt
-    startRecordingAttempt();
+    this->startRecordingAttempt();
     
     return true;
 }
@@ -63,10 +63,10 @@ void PlayLayer::update(float dt) {
     PlayLayer::update(dt);
     
     // Record current frame for ghost saving
-    recordCurrentFrame();
+    this->recordCurrentFrame();
     
     // Update ghost racing
-    updateGhostRacing(dt);
+    this->updateGhostRacing(dt);
 }
 
 void PlayLayer::updateGhostRacing(float dt) {
@@ -82,79 +82,21 @@ void PlayLayer::destroyPlayer(PlayerObject* player, GameObject* object) {
     float percentage = m_gameState.m_percentage;
     
     // Stop recording and save if this was a new best
-    stopRecordingAttempt(percentage);
+    this->stopRecordingAttempt(percentage);
     
     PlayLayer::destroyPlayer(player, object);
 }
 
 void PlayLayer::resetLevel() {
     // Start a fresh recording on reset
-    startRecordingAttempt();
+    this->startRecordingAttempt();
     
     PlayLayer::resetLevel();
 }
 
 void PlayLayer::levelComplete() {
     // Save the completion ghost (100%)
-    stopRecordingAttempt(100.0f);
-    
-    PlayLayer::levelComplete();
-}void PlayLayer::update(float dt) {
-    PlayLayer::update(dt);
-    
-    // Record current frame for ghost saving
-    recordCurrentFrame();
-    
-    // Update ghost racing
-    updateGhostRacing(dt);
-}
-
-void PlayLayer::updateGhostRacing(float dt) {
-    if (!GhostManager::get().isRacing()) return;
-    if (!GhostRenderer::get().isActive()) return;
-    
-    float currentTime = m_gameState.m_currentTime;
-    GhostRenderer::get().update(currentTime);
-    
-    // Optional: Show comparison overlay if enabled
-    bool showOverlay = Mod::get()->getSettingValue<bool>("show-overlay");
-    if (showOverlay && GhostManager::get().getActiveGhost()) {
-        auto* ghost = GhostManager::get().getActiveGhost();
-        float ghostBest = ghost->percentage;
-        float currentPercent = m_gameState.m_percentage;
-        
-        // Draw text overlay (simplified - you'd use CCLabelBMFont)
-        // This would show "You: X% / Ghost: Y%" on screen
-    }
-}
-
-void PlayLayer::renderGhost() {
-    if (!GhostManager::get().isRacing()) return;
-    if (!GhostRenderer::get().isActive()) return;
-    
-    GhostRenderer::get().render();
-}
-
-void PlayLayer::destroyPlayer(PlayerObject* player, GameObject* object) {
-    // Get current percentage before death
-    float percentage = m_gameState.m_percentage;
-    
-    // Stop recording and save if this was a new best
-    stopRecordingAttempt(percentage);
-    
-    PlayLayer::destroyPlayer(player, object);
-}
-
-void PlayLayer::resetLevel() {
-    // Start a fresh recording on reset
-    startRecordingAttempt();
-    
-    PlayLayer::resetLevel();
-}
-
-void PlayLayer::levelComplete() {
-    // Save the completion ghost (100%)
-    stopRecordingAttempt(100.0f);
+    this->stopRecordingAttempt(100.0f);
     
     PlayLayer::levelComplete();
 }

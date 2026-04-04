@@ -5,19 +5,18 @@
 using namespace geode::prelude;
 
 class $modify(PlayLayer) {
-private:
-    bool m_isRecording = false;
-    float m_lastRecordedTime = 0;
+    struct Fields {
+        bool m_isRecording = false;
+        float m_lastRecordedTime = 0;
+    };
     
 public:
-    // Hooked methods
-    bool init(GJGameLevel* level);
+    bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects);
     void update(float dt);
     void resetLevel();
     void destroyPlayer(PlayerObject* player, GameObject* object);
     void levelComplete();
     
-    // Custom methods
     void startRecordingAttempt();
     void stopRecordingAttempt(float percentage);
     void recordCurrentFrame();

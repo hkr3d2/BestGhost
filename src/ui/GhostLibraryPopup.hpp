@@ -1,22 +1,22 @@
 #pragma once
 #include <Geode/Geode.hpp>
 #include <Geode/ui/Popup.hpp>
-#include "../GhostData.hpp"
+#include "GhostData.hpp"
 
 using namespace geode::prelude;
 
-class GhostLibraryPopup : public Popup<> {
+class GhostLibraryPopup : public Popup<>, public geode::Popup<> {
+protected:
+    bool setup(bool selectionMode) override;
+    
+public:
+    static GhostLibraryPopup* create(bool selectionMode = false);
+    
 private:
     bool m_selectionMode = false;
     CCMenu* m_listMenu = nullptr;
     ScrollLayer* m_scrollLayer = nullptr;
     
-public:
-    static GhostLibraryPopup* create(bool selectionMode = false);
-    
-    bool setup(bool selectionMode);
-    
-private:
     void refreshList();
     void onRaceGhost(CCObject* sender);
     void onWatchGhost(CCObject* sender);

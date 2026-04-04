@@ -14,7 +14,7 @@ struct GhostFrame {
 };
 
 struct GhostData {
-    std::string levelID;
+    int levelID = 0;
     float percentage = 0;
     std::vector<GhostFrame> frames;
     

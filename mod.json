@@ -6,7 +6,7 @@
     "developer": "Hkr3d2",
     "description": "Race against your personal best ghosts. Saves every new best percentage.",
     "tags": ["gameplay", "practice", "utility"],
-    "dependencies": [],
+    "dependencies": {},
     "resources": {
         "files": []
     },

@@ -119,13 +119,12 @@ class $modify(MyPlayLayer, PlayLayer) {
 };
 
 /**
- * PauseLayer Hooks with Custom Positioning
+ * PauseLayer Hooks
  */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
         
-        // Use the right-side menu as the parent
         auto menu = this->getChildByID("right-button-menu");
         if (!menu) menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
 
@@ -139,11 +138,7 @@ class $modify(MyPauseLayer, PauseLayer) {
             toggler->toggle(g_isRecordingEnabled);
             
             menu->addChild(toggler);
-            
-            // RESTORE YOUR POSITION
             toggler->setPosition({249.0f, 116.0f}); 
-            
-            // Ensure the menu layout doesn't override the manual position
             menu->updateLayout();
         }
     }
@@ -157,7 +152,7 @@ class $modify(MyPauseLayer, PauseLayer) {
 };
 
 /**
- * Update Loop
+ * Update Loop with Block-to-Unit conversion
  */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
@@ -179,12 +174,13 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
             size_t idx = myPL->m_fields->m_playbackIndex;
 
             if (idx < g_bestAttemptData.size()) {
-                // Read from text input offset
-                double offsetVal = Mod::get()->getSettingValue<double>("ghost-offset");
+                // Get offset in blocks and multiply by 30 (1 block = 30 units)
+                double offsetBlocks = Mod::get()->getSettingValue<double>("ghost-offset");
+                float finalXOffset = static_cast<float>(offsetBlocks) * 30.0f;
                 
                 myPL->m_fields->m_ghostVisual->setVisible(true);
                 myPL->m_fields->m_ghostVisual->setPosition({ 
-                    g_bestAttemptData[idx].x + static_cast<float>(offsetVal), 
+                    g_bestAttemptData[idx].x + finalXOffset, 
                     g_bestAttemptData[idx].y 
                 });
                 

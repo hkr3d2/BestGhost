@@ -117,7 +117,7 @@ class $modify(MyPauseLayer, PauseLayer) {
             // Manual positioning: 
             // We do NOT call setLayout. We just nudge the toggler 
             // relative to the menu's center point.
-            toggler->setPosition({250, 100.0f}); 
+            toggler->setPosition({249, 116.0f}); 
         }
     }
 

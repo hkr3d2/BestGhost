@@ -226,17 +226,16 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
 };
 
 /**
- * 4. Stable Setting Listener
+ * 4. Setting Listener Fix
  */
 $execute {
-    // We use a listener on a bool. When checked, it opens folder and unchecks itself.
-    Mod::get()->addValueListener<bool>("open-library", [](bool value) {
+    listenForSettingChanges<bool>("open-library", [](bool value) {
         if (value) {
             auto path = Mod::get()->getSaveDir() / "ghosts";
             if (!fs::exists(path)) fs::create_directories(path);
             utils::file::openFolder(path);
             
-            // Auto-reset the toggle
+            // Toggle back to off
             Mod::get()->setSettingValue("open-library", false);
         }
     });

@@ -33,10 +33,12 @@ class $modify(MyPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
 
+        // Reset state for new level entry
         g_isRecordingEnabled = false;
         m_fields->m_playbackIndex = 0;
         g_currentAttemptData.clear();
 
+        // Status Label
         auto label = CCLabelBMFont::create("", "bigFont.fnt");
         label->setScale(0.35f);
         label->setOpacity(120);
@@ -44,6 +46,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         this->addChild(label, 100);
         m_fields->m_statusLabel = label;
 
+        // Ghost Sprite
         auto ghost = CCSprite::createWithSpriteFrameName("GJ_square01_001.png");
         if (ghost) {
             ghost->setScale(0.6f);
@@ -71,13 +74,17 @@ class $modify(MyPlayLayer, PlayLayer) {
 
     void resetLevel() {
         PlayLayer::resetLevel();
+        
         if (g_isRecordingEnabled && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
+
+            // Update only if this was the BEST run so far
             if (currentMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
                 g_bestAttemptData = g_currentAttemptData;
             }
         }
+
         g_currentAttemptData.clear();
         m_fields->m_playbackIndex = 0;
         if (m_fields->m_ghostVisual) m_fields->m_ghostVisual->setVisible(false);
@@ -86,28 +93,16 @@ class $modify(MyPlayLayer, PlayLayer) {
 };
 
 /**
- * 2. PauseLayer Hooks - Targeted Settings Menu
+ * 2. PauseLayer Hooks - Manual Positioning to protect main buttons
  */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
 
-        // Target the menu that specifically holds the settings gear
+        // Target the settings menu
         auto menu = this->getChildByID("settings-button-menu");
-        
-        // If ID search fails, find the small menu at the bottom center/right
-        if (!menu) {
-            for (auto child : CCArrayExt<CCNode*>(this->getChildren())) {
-                if (auto m = typeinfo_cast<CCMenu*>(child)) {
-                    // The settings menu is usually small and low on the screen
-                    // Unlike the main menu which is huge and centered.
-                    if (m->getContentSize().width < 100.f && m->getPositionY() < 100.f) {
-                        menu = m;
-                        break;
-                    }
-                }
-            }
-        }
+        if (!menu) menu = this->getChildByID("right-button-menu");
+        if (!menu) menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
 
         if (menu) {
             auto toggler = CCMenuItemToggler::createWithStandardSprites(
@@ -116,17 +111,13 @@ class $modify(MyPauseLayer, PauseLayer) {
             toggler->setID("ghost-toggle"_spr);
             toggler->toggle(g_isRecordingEnabled);
             
+            // Add to menu normally
             menu->addChild(toggler);
 
-            // Use ColumnLayout to stack it UNDER the gear
-            // We use AxisReverse so the toggle goes below the existing button
-            auto layout = ColumnLayout::create()
-                ->setGap(5.f)
-                ->setAxisReverse(true)
-                ->setAxisAlignment(AxisAlignment::Center);
-
-            menu->setLayout(layout);
-            menu->updateLayout();
+            // Manual positioning: 
+            // We do NOT call setLayout. We just nudge the toggler 
+            // relative to the menu's center point.
+            toggler->setPosition({250, 100.0f}); 
         }
     }
 
@@ -160,6 +151,7 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
         if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
             size_t index = myPL->m_fields->m_playbackIndex;
+            
             if (index < g_bestAttemptData.size()) {
                 myPL->m_fields->m_ghostVisual->setVisible(true);
                 myPL->m_fields->m_ghostVisual->setPosition({ 

@@ -3,63 +3,66 @@
 #include <Geode/modify/PauseLayer.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <vector>
-#include <sstream>
+#include <fstream>
+#include <filesystem>
 
 using namespace geode::prelude;
+namespace fs = std::filesystem;
 
 struct GhostFrame {
     float x;
     float y;
 };
 
-// Global Settings
+// Global State
 bool g_isRecordingEnabled = false;
-float g_ghostXOffset = -30.0f; // 1 Block Behind
-
-// Best Run Persistence
 std::vector<GhostFrame> g_bestAttemptData;
 std::vector<GhostFrame> g_currentAttemptData;
 float g_bestXAttained = 0.0f;
 
 /**
- * Data Persistence Helpers
+ * Ghost Library: File Management
  */
-void saveGhostData(int levelID) {
-    if (g_bestAttemptData.empty()) return;
-
-    std::string encoded;
-    for (const auto& frame : g_bestAttemptData) {
-        encoded += std::to_string(frame.x) + "," + std::to_string(frame.y) + "|";
-    }
-
-    std::string key = "best_ghost_" + std::to_string(levelID);
-    Mod::get()->setSavedValue<std::string>(key, encoded);
-    Mod::get()->setSavedValue<float>(key + "_dist", g_bestXAttained);
+fs::path getGhostPath(int levelID) {
+    auto path = Mod::get()->getSaveDir() / "ghosts";
+    if (!fs::exists(path)) fs::create_directories(path);
+    return path / (std::to_string(levelID) + ".ghst");
 }
 
-void loadGhostData(int levelID) {
-    g_bestAttemptData.clear();
-    std::string key = "best_ghost_" + std::to_string(levelID);
+void saveGhostFile(int levelID) {
+    if (g_bestAttemptData.empty()) return;
     
-    g_bestXAttained = Mod::get()->getSavedValue<float>(key + "_dist", 0.0f);
-    std::string encoded = Mod::get()->getSavedValue<std::string>(key, "");
+    std::ofstream file(getGhostPath(levelID), std::ios::binary);
+    if (!file.is_open()) return;
 
-    if (encoded.empty()) return;
-
-    std::stringstream ss(encoded);
-    std::string segment;
-    while (std::getline(ss, segment, '|')) {
-        size_t comma = segment.find(',');
-        if (comma != std::string::npos) {
-            try {
-                float x = std::stof(segment.substr(0, comma));
-                float y = std::stof(segment.substr(comma + 1));
-                g_bestAttemptData.push_back({x, y});
-            } catch (...) {
-                continue; 
-            }
-        }
+    // Write the distance first as a header
+    file.write(reinterpret_cast<char*>(&g_bestXAttained), sizeof(float));
+    
+    // Write the frames
+    for (const auto& frame : g_bestAttemptData) {
+        file.write(reinterpret_cast<const char*>(&frame), sizeof(GhostFrame));
     }
+    file.close();
+}
+
+void loadGhostFile(int levelID) {
+    g_bestAttemptData.clear();
+    auto path = getGhostPath(levelID);
+    if (!fs::exists(path)) {
+        g_bestXAttained = 0.0f;
+        return;
+    }
+
+    std::ifstream file(path, std::ios::binary);
+    if (!file.is_open()) return;
+
+    file.read(reinterpret_cast<char*>(&g_bestXAttained), sizeof(float));
+
+    GhostFrame frame;
+    while (file.read(reinterpret_cast<char*>(&frame), sizeof(GhostFrame))) {
+        g_bestAttemptData.push_back(frame);
+    }
+    file.close();
 }
 
 /**
@@ -75,9 +78,7 @@ class $modify(MyPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
 
-        // Load saved ghost for this level
-        loadGhostData(level->m_levelID.value());
-
+        loadGhostFile(level->m_levelID.value());
         g_isRecordingEnabled = false;
         m_fields->m_playbackIndex = 0;
         g_currentAttemptData.clear();
@@ -86,6 +87,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         label->setScale(0.35f);
         label->setOpacity(120);
         label->setPosition({ CCDirector::get()->getWinSize().width / 2, 25 });
+        label->setVisible(Mod::get()->getSettingValue<bool>("show-indicator"));
         this->addChild(label, 100);
         m_fields->m_statusLabel = label;
 
@@ -105,28 +107,42 @@ class $modify(MyPlayLayer, PlayLayer) {
 
     void updateUI() {
         if (!m_fields->m_statusLabel) return;
+        m_fields->m_statusLabel->setVisible(Mod::get()->getSettingValue<bool>("show-indicator"));
+        
+        bool replayOnly = Mod::get()->getSettingValue<bool>("replay-only");
+        bool spectate = Mod::get()->getSettingValue<bool>("spectate-mode");
+
         if (!g_isRecordingEnabled) {
             m_fields->m_statusLabel->setString("BestGhost: OFF");
             m_fields->m_statusLabel->setColor({ 200, 200, 200 });
         } else {
-            m_fields->m_statusLabel->setString(g_bestAttemptData.empty() ? "BestGhost: RECORDING..." : "BestGhost: ACTIVE");
-            m_fields->m_statusLabel->setColor({ 0, 255, 255 });
+            if (spectate) {
+                m_fields->m_statusLabel->setString("BestGhost: SPECTATING");
+                m_fields->m_statusLabel->setColor({ 150, 0, 255 });
+            } else if (replayOnly) {
+                m_fields->m_statusLabel->setString("BestGhost: REPLAY ONLY");
+                m_fields->m_statusLabel->setColor({ 255, 200, 0 });
+            } else {
+                m_fields->m_statusLabel->setString(g_bestAttemptData.empty() ? "BestGhost: RECORDING..." : "BestGhost: ACTIVE");
+                m_fields->m_statusLabel->setColor({ 0, 255, 255 });
+            }
         }
     }
 
     void resetLevel() {
         PlayLayer::resetLevel();
-        
-        if (g_isRecordingEnabled && !g_currentAttemptData.empty()) {
-            float currentMaxX = g_currentAttemptData.back().x;
+        bool replayOnly = Mod::get()->getSettingValue<bool>("replay-only");
+        bool spectate = Mod::get()->getSettingValue<bool>("spectate-mode");
 
+        if (g_isRecordingEnabled && !g_currentAttemptData.empty() && !replayOnly && !spectate) {
+            float currentMaxX = g_currentAttemptData.back().x;
             if (currentMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
                 g_bestAttemptData = g_currentAttemptData;
-                saveGhostData(m_level->m_levelID.value());
+                saveGhostFile(m_level->m_levelID.value());
             }
         }
-
+        
         g_currentAttemptData.clear();
         m_fields->m_playbackIndex = 0;
         if (m_fields->m_ghostVisual) m_fields->m_ghostVisual->setVisible(false);
@@ -140,7 +156,6 @@ class $modify(MyPlayLayer, PlayLayer) {
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
-
         auto menu = this->getChildByID("settings-button-menu");
         if (!menu) menu = this->getChildByID("right-button-menu");
         if (!menu) menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
@@ -152,8 +167,6 @@ class $modify(MyPauseLayer, PauseLayer) {
             toggler->setID("ghost-toggle"_spr);
             toggler->toggle(g_isRecordingEnabled);
             menu->addChild(toggler);
-
-            // Manual coordinates from your working version
             toggler->setPosition({249.0f, 116.0f}); 
         }
     }
@@ -161,11 +174,8 @@ class $modify(MyPauseLayer, PauseLayer) {
     void onToggleGhost(CCObject* sender) {
         auto toggler = static_cast<CCMenuItemToggler*>(sender);
         g_isRecordingEnabled = !toggler->isOn(); 
-
         this->onResume(nullptr);
-        if (auto pl = PlayLayer::get()) {
-            pl->resetLevel();
-        }
+        if (auto pl = PlayLayer::get()) pl->resetLevel();
     }
 };
 
@@ -183,22 +193,48 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto player = playLayer->m_player1;
         if (!player) return;
 
-        g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
+        bool spectate = Mod::get()->getSettingValue<bool>("spectate-mode");
+        bool replayOnly = Mod::get()->getSettingValue<bool>("replay-only");
+
+        if (!replayOnly && !spectate) {
+            g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
+        }
 
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
         if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
             size_t index = myPL->m_fields->m_playbackIndex;
-            
             if (index < g_bestAttemptData.size()) {
                 myPL->m_fields->m_ghostVisual->setVisible(true);
-                myPL->m_fields->m_ghostVisual->setPosition({ 
-                    g_bestAttemptData[index].x + g_ghostXOffset, 
-                    g_bestAttemptData[index].y 
-                });
+                
+                float offset = Mod::get()->getSettingValue<double>("ghost-offset");
+                float targetX = g_bestAttemptData[index].x;
+                float targetY = g_bestAttemptData[index].y;
+
+                if (spectate) {
+                    player->setPosition({ targetX, targetY });
+                    player->m_isDead = false;
+                    player->setVisible(false);
+                } else {
+                    player->setVisible(true);
+                }
+
+                myPL->m_fields->m_ghostVisual->setPosition({ targetX + offset, targetY });
                 myPL->m_fields->m_playbackIndex++;
             } else {
                 myPL->m_fields->m_ghostVisual->setVisible(false);
+                if (spectate) playLayer->resetLevel();
             }
         }
     }
 };
+
+/**
+ * 4. Custom Settings Logic
+ */
+$execute {
+    Mod::get()->addCustomSetting<void>("open-library", [](auto* setting) {
+        auto path = Mod::get()->getSaveDir() / "ghosts";
+        if (!fs::exists(path)) fs::create_directories(path);
+        utils::file::openFolder(path);
+    });
+}

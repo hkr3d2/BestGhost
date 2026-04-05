@@ -119,16 +119,32 @@ class $modify(MyPlayLayer, PlayLayer) {
 };
 
 /**
- * PauseLayer Hooks
+ * PauseLayer Hooks with Custom Positioning
  */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
+        
+        // Use the right-side menu as the parent
         auto menu = this->getChildByID("right-button-menu");
+        if (!menu) menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
+
         if (menu) {
-            auto toggler = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(MyPauseLayer::onToggleGhost), 0.6f);
+            auto toggler = CCMenuItemToggler::createWithStandardSprites(
+                this, 
+                menu_selector(MyPauseLayer::onToggleGhost), 
+                0.6f
+            );
+            toggler->setID("ghost-toggle"_spr);
             toggler->toggle(g_isRecordingEnabled);
+            
             menu->addChild(toggler);
+            
+            // RESTORE YOUR POSITION
+            toggler->setPosition({249.0f, 116.0f}); 
+            
+            // Ensure the menu layout doesn't override the manual position
+            menu->updateLayout();
         }
     }
 
@@ -141,7 +157,7 @@ class $modify(MyPauseLayer, PauseLayer) {
 };
 
 /**
- * Update Loop with Position Slider
+ * Update Loop
  */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
@@ -157,20 +173,18 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         // 1. Record Frame
         g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
 
-        // 2. Playback with Slider Offset
+        // 2. Playback
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
         if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
             size_t idx = myPL->m_fields->m_playbackIndex;
 
             if (idx < g_bestAttemptData.size()) {
-                // Fetch the offset from settings (float)
-                float xOffset = static_cast<float>(Mod::get()->getSettingValue<double>("ghost-offset"));
+                // Read from text input offset
+                double offsetVal = Mod::get()->getSettingValue<double>("ghost-offset");
                 
                 myPL->m_fields->m_ghostVisual->setVisible(true);
-                
-                // Apply the offset to the recorded X position
                 myPL->m_fields->m_ghostVisual->setPosition({ 
-                    g_bestAttemptData[idx].x + xOffset, 
+                    g_bestAttemptData[idx].x + static_cast<float>(offsetVal), 
                     g_bestAttemptData[idx].y 
                 });
                 

@@ -13,9 +13,9 @@ struct GhostFrame {
 
 // Global Settings
 bool g_isRecordingEnabled = false;
-float g_ghostXOffset = 30.0f; // +30 units = 1 Block AFTER the player
+float g_ghostXOffset = -30.0f; // 1 Block Behind
 
-// Global Data
+// Global Data (Persists until the game is closed or a new recording starts)
 std::vector<GhostFrame> g_bestAttemptData;
 std::vector<GhostFrame> g_currentAttemptData;
 
@@ -32,6 +32,10 @@ class $modify(MyPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
 
+        // Turn OFF recording/playback by default when entering a level
+        // But we DO NOT clear g_bestAttemptData here so the ghost is preserved
+        g_isRecordingEnabled = false;
+        
         m_fields->m_playbackIndex = 0;
         g_currentAttemptData.clear();
 
@@ -58,15 +62,6 @@ class $modify(MyPlayLayer, PlayLayer) {
         return true;
     }
 
-    // --- NEW: DISABLE GHOST ON EXIT ---
-    void onExit() {
-        PlayLayer::onExit();
-        g_isRecordingEnabled = false;
-        g_bestAttemptData.clear();
-        g_currentAttemptData.clear();
-        log::info("Ghost: Session cleared on level exit.");
-    }
-
     void updateUI() {
         if (!m_fields->m_statusLabel) return;
         m_fields->m_statusLabel->setString(g_isRecordingEnabled ? (g_bestAttemptData.empty() ? "Ghost: RECORDING..." : "Ghost: ACTIVE") : "Ghost: OFF");
@@ -86,17 +81,17 @@ class $modify(MyPlayLayer, PlayLayer) {
 };
 
 /**
- * 2. PauseLayer Hooks - Placed near Settings
+ * 2. PauseLayer Hooks - Precision placement near settings
  */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
 
-        // Target the settings menu (bottom right usually)
+        auto winSize = CCDirector::get()->getWinSize();
+        
+        // Find the settings menu
         auto menu = this->getChildByID("settings-button-menu");
-        if (!menu) menu = this->getChildByID("right-button-menu");
-        if (!menu) menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
-
+        
         if (menu) {
             auto toggler = CCMenuItemToggler::createWithStandardSprites(
                 this, menu_selector(MyPauseLayer::onToggleGhost), 0.65f
@@ -104,19 +99,28 @@ class $modify(MyPauseLayer, PauseLayer) {
             toggler->setID("ghost-toggle"_spr);
             toggler->toggle(g_isRecordingEnabled);
             
+            // Add to the menu
             menu->addChild(toggler);
-            menu->updateLayout();
+            
+            // Manual Offset: Push it to the left of the existing buttons
+            toggler->setPosition({-40.0f, 0.0f}); 
+        } else {
+            // Fallback: If no settings menu, put it in the top right
+            auto fallbackMenu = CCMenu::create();
+            fallbackMenu->setPosition({winSize.width - 30.0f, winSize.height - 30.0f});
+            this->addChild(fallbackMenu);
+            
+            auto toggler = CCMenuItemToggler::createWithStandardSprites(
+                this, menu_selector(MyPauseLayer::onToggleGhost), 0.65f
+            );
+            toggler->toggle(g_isRecordingEnabled);
+            fallbackMenu->addChild(toggler);
         }
     }
 
     void onToggleGhost(CCObject* sender) {
         auto toggler = static_cast<CCMenuItemToggler*>(sender);
         g_isRecordingEnabled = !toggler->isOn(); 
-        
-        if (!g_isRecordingEnabled) {
-            g_bestAttemptData.clear();
-            g_currentAttemptData.clear();
-        }
 
         this->onResume(nullptr);
         if (auto pl = PlayLayer::get()) {
@@ -126,7 +130,7 @@ class $modify(MyPauseLayer, PauseLayer) {
 };
 
 /**
- * 3. Update Loop - X Offset applied
+ * 3. Update Loop
  */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
@@ -146,8 +150,7 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
             size_t index = myPL->m_fields->m_playbackIndex;
             if (index < g_bestAttemptData.size()) {
                 myPL->m_fields->m_ghostVisual->setVisible(true);
-                
-                // Position + X Offset (Trail behind)
+                // 1 block behind on X axis
                 myPL->m_fields->m_ghostVisual->setPosition({ 
                     g_bestAttemptData[index].x + g_ghostXOffset, 
                     g_bestAttemptData[index].y 

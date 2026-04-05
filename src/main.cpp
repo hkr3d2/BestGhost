@@ -10,7 +10,6 @@
 using namespace geode::prelude;
 namespace fs = std::filesystem;
 
-// Using an enum to track gamemodes efficiently
 enum GhostMode { Cube, Ship, Ball, Bird, Dart, Robot, Spider, Swing };
 
 struct GhostFrame {
@@ -289,7 +288,7 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                 g->setPosition({ frame.x, frame.y });
                 g->setRotation(frame.rotation);
                 
-                // Toggle gamemode flags to update visuals
+                // Toggle gamemode flags
                 g->m_isShip = (frame.mode == Ship);
                 g->m_isBall = (frame.mode == Ball);
                 g->m_isBird = (frame.mode == Bird);
@@ -298,7 +297,8 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                 g->m_isSpider = (frame.mode == Spider);
                 g->m_isSwing = (frame.mode == Swing);
                 
-                g->updateMainLayer(); // Force visual refresh of the vehicle
+                // Refresh the sprite frames for the current mode
+                g->updatePlayerFrame();
                 g->update(dt);
             } else {
                 myPL->m_fields->m_ghostVisual->setVisible(false);

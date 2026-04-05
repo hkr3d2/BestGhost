@@ -10,13 +10,10 @@
 using namespace geode::prelude;
 namespace fs = std::filesystem;
 
-enum GhostMode { Cube, Ship, Ball, Bird, Dart, Robot, Spider, Swing };
-
 struct GhostFrame {
     float x;
     float y;
     float rotation;
-    GhostMode mode;
 };
 
 // Global Session State
@@ -85,9 +82,10 @@ class $modify(MyPlayLayer, PlayLayer) {
         m_fields->m_statusLabel = label;
 
         auto gm = GameManager::sharedState();
+        // Create a PlayerObject that uses your icons
         auto ghost = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
         if (ghost) {
-            ghost->setOpacity(76);
+            ghost->setOpacity(76); // 30% Opacity
             ghost->setVisible(false);
             m_fields->m_ghostVisual = ghost;
             if (this->m_objectLayer) this->m_objectLayer->addChild(ghost, 1000);
@@ -256,50 +254,35 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto playLayer = typeinfo_cast<PlayLayer*>(this);
         if (!playLayer || playLayer->m_isPaused) return;
 
-        auto p = playLayer->m_player1;
+        auto player = playLayer->m_player1;
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
 
+        // 1. Record Position AND Rotation
         if (g_isRecordingEnabled) {
-            GhostMode currentMode = Cube;
-            if (p->m_isShip) currentMode = Ship;
-            else if (p->m_isBall) currentMode = Ball;
-            else if (p->m_isBird) currentMode = Bird;
-            else if (p->m_isDart) currentMode = Dart;
-            else if (p->m_isRobot) currentMode = Robot;
-            else if (p->m_isSpider) currentMode = Spider;
-            else if (p->m_isSwing) currentMode = Swing;
-
             g_currentAttemptData.push_back({ 
-                p->getPositionX(), p->getPositionY(), p->getRotation(), currentMode 
+                player->getPositionX(), 
+                player->getPositionY(), 
+                player->getRotation() 
             });
         }
         
         myPL->m_fields->m_timeCounter += 1.0;
 
+        // 2. Playback recorded data
         if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
             double offset = Mod::get()->getSettingValue<double>("ghost-offset");
             int targetIdx = static_cast<int>(myPL->m_fields->m_timeCounter + (offset * 4.0));
 
             if (targetIdx >= 0 && targetIdx < static_cast<int>(g_bestAttemptData.size())) {
                 auto& frame = g_bestAttemptData[targetIdx];
-                auto g = myPL->m_fields->m_ghostVisual;
-
-                g->setVisible(true);
-                g->setPosition({ frame.x, frame.y });
-                g->setRotation(frame.rotation);
                 
-                // Toggle gamemode flags
-                g->m_isShip = (frame.mode == Ship);
-                g->m_isBall = (frame.mode == Ball);
-                g->m_isBird = (frame.mode == Bird);
-                g->m_isDart = (frame.mode == Dart);
-                g->m_isRobot = (frame.mode == Robot);
-                g->m_isSpider = (frame.mode == Spider);
-                g->m_isSwing = (frame.mode == Swing);
+                myPL->m_fields->m_ghostVisual->setVisible(true);
+                myPL->m_fields->m_ghostVisual->setPosition({ frame.x, frame.y });
+                myPL->m_fields->m_ghostVisual->setRotation(frame.rotation);
                 
-                // GD 2.2 compliant way to update icons
-                g->updatePlayerIconStack();
-                g->update(dt);
+                // Keep the ghost's animation state updated (mimics your current gamemode visuals)
+                myPL->m_fields->m_ghostVisual->update(dt);
+                
             } else {
                 myPL->m_fields->m_ghostVisual->setVisible(false);
             }

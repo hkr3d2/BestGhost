@@ -38,12 +38,6 @@
         "type": "bool",
         "default": true
     },
-    "replay-mode": {
-        "name": "Replay Only Mode",
-        "description": "The ghost will play, but your current run will NOT be recorded.",
-        "type": "bool",
-        "default": false
-    },
     "open-library": {
         "name": "Open Ghost Library",
         "description": "Click to open the folder where .ghst files are stored.",

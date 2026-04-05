@@ -77,22 +77,23 @@ class $modify(MyPlayLayer, PlayLayer) {
 };
 
 /**
- * 2. PauseLayer Hooks - More aggressive button placement
+ * 2. PauseLayer Hooks
  */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
 
-        // Try to find the bottom menu if the right menu isn't found
+        // Standard Geode menu IDs
         auto menu = this->getChildByID("right-button-menu");
         if (!menu) menu = this->getChildByID("bottom-button-menu");
         
-        // If still nothing, just find any CCMenu in the layer
+        // Final fallback if IDs fail: search for the first CCMenu
         if (!menu) {
-            menu = static_cast<CCMenu*>(this->getChildByIType<CCMenu>(0));
+            menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
         }
 
         if (menu) {
+            // Standard Toggler
             auto toggler = CCMenuItemToggler::createWithStandardSprites(
                 this, menu_selector(MyPauseLayer::onToggleGhost), 0.7f
             );
@@ -105,7 +106,9 @@ class $modify(MyPauseLayer, PauseLayer) {
     }
 
     void onToggleGhost(CCObject* sender) {
-        g_isRecordingEnabled = !static_cast<CCMenuItemToggler*>(sender)->isOn();
+        // Correcting toggle logic: get the state from the toggler
+        auto toggler = static_cast<CCMenuItemToggler*>(sender);
+        g_isRecordingEnabled = !toggler->isOn(); 
         
         if (!g_isRecordingEnabled) {
             g_bestAttemptData.clear();

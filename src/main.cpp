@@ -13,6 +13,7 @@ namespace fs = std::filesystem;
 struct GhostFrame {
     float x;
     float y;
+    float rotation;
 };
 
 // Global Session State
@@ -81,10 +82,10 @@ class $modify(MyPlayLayer, PlayLayer) {
         m_fields->m_statusLabel = label;
 
         auto gm = GameManager::sharedState();
+        // Create a PlayerObject that uses your icons
         auto ghost = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
         if (ghost) {
-            // Fixed 30% Opacity (0.3 * 255 = ~76)
-            ghost->setOpacity(76);
+            ghost->setOpacity(76); // 30% Opacity
             ghost->setVisible(false);
             m_fields->m_ghostVisual = ghost;
             if (this->m_objectLayer) this->m_objectLayer->addChild(ghost, 1000);
@@ -153,21 +154,18 @@ public:
         menu->setTouchPriority(-501); 
         m_mainLayer->addChild(menu);
 
-        // Record Toggle
         createLabel("Record Ghost", {winSize.width / 2 - 50, winSize.height / 2 + 40});
         auto recToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
         recToggle->setPosition({ 60, 40 });
         recToggle->toggle(g_isRecordingEnabled);
         menu->addChild(recToggle);
 
-        // Status Toggle
         createLabel("Show Status", {winSize.width / 2 - 50, winSize.height / 2 + 5});
         auto statToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleStatus), 0.7f);
         statToggle->setPosition({ 60, 5 });
         statToggle->toggle(Mod::get()->getSettingValue<bool>("show-indicator"));
         menu->addChild(statToggle);
 
-        // X Offset
         createLabel("X Offset", {winSize.width / 2 - 50, winSize.height / 2 - 30});
         m_offsetInput = CCTextInputNode::create(60.f, 20.f, "0", "bigFont.fnt");
         m_offsetInput->setAllowedChars("0123456789.-");
@@ -178,7 +176,6 @@ public:
         m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 30});
         m_mainLayer->addChild(m_offsetInput);
 
-        // Close
         auto closeBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"), this, menu_selector(GhostSettingsLayer::onClose));
         closeBtn->setPosition({ -110, 65 });
         menu->addChild(closeBtn);
@@ -226,7 +223,6 @@ public:
     }
 
     void keyBackClicked() override { onClose(nullptr); }
-
     bool ccTouchBegan(CCTouch* touch, CCEvent* event) override { return true; }
 };
 
@@ -261,19 +257,32 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto player = playLayer->m_player1;
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
 
+        // 1. Record Position AND Rotation
         if (g_isRecordingEnabled) {
-            g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
+            g_currentAttemptData.push_back({ 
+                player->getPositionX(), 
+                player->getPositionY(), 
+                player->getRotation() 
+            });
         }
         
         myPL->m_fields->m_timeCounter += 1.0;
 
+        // 2. Playback recorded data
         if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
             double offset = Mod::get()->getSettingValue<double>("ghost-offset");
             int targetIdx = static_cast<int>(myPL->m_fields->m_timeCounter + (offset * 4.0));
 
             if (targetIdx >= 0 && targetIdx < static_cast<int>(g_bestAttemptData.size())) {
+                auto& frame = g_bestAttemptData[targetIdx];
+                
                 myPL->m_fields->m_ghostVisual->setVisible(true);
-                myPL->m_fields->m_ghostVisual->setPosition({ g_bestAttemptData[targetIdx].x, g_bestAttemptData[targetIdx].y });
+                myPL->m_fields->m_ghostVisual->setPosition({ frame.x, frame.y });
+                myPL->m_fields->m_ghostVisual->setRotation(frame.rotation);
+                
+                // Keep the ghost's animation state updated (mimics your current gamemode visuals)
+                myPL->m_fields->m_ghostVisual->update(dt);
+                
             } else {
                 myPL->m_fields->m_ghostVisual->setVisible(false);
             }

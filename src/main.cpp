@@ -83,9 +83,10 @@ class $modify(MyPlayLayer, PlayLayer) {
         this->addChild(label, 100);
         m_fields->m_statusLabel = label;
 
-        // Initialize Ghost Players (Using actual game icons)
+        // Initialize Ghost Players
         auto gm = GameManager::sharedState();
         
+        // Creating PlayerObjects that mimic the user
         m_fields->m_ghostPlayer1 = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
         m_fields->m_ghostPlayer2 = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
 
@@ -93,8 +94,9 @@ class $modify(MyPlayLayer, PlayLayer) {
         
         for (auto player : {m_fields->m_ghostPlayer1, m_fields->m_ghostPlayer2}) {
             if (player) {
-                player->setOpacity(static_cast<uint8_t>(opacity * 2.55f)); // 0-100 to 0-255
+                player->setOpacity(static_cast<uint8_t>(opacity * 2.55f));
                 player->setVisible(false);
+                // Use m_objectLayer for correct depth and scrolling
                 if (this->m_objectLayer) this->m_objectLayer->addChild(player, 1000);
             }
         }
@@ -109,7 +111,6 @@ class $modify(MyPlayLayer, PlayLayer) {
         m_fields->m_statusLabel->setString(g_isRecordingEnabled ? "BestGhost: RECORDING" : "BestGhost: OFF");
         m_fields->m_statusLabel->setColor(g_isRecordingEnabled ? ccColor3B{0, 255, 255} : ccColor3B{200, 200, 200});
         
-        // Update Opacity Live
         float op = static_cast<float>(Mod::get()->getSettingValue<double>("ghost-opacity")) * 2.55f;
         if (m_fields->m_ghostPlayer1) m_fields->m_ghostPlayer1->setOpacity(static_cast<uint8_t>(op));
         if (m_fields->m_ghostPlayer2) m_fields->m_ghostPlayer2->setOpacity(static_cast<uint8_t>(op));
@@ -165,31 +166,26 @@ public:
         menu->setTouchPriority(-501); 
         m_mainLayer->addChild(menu);
 
-        // 1. Record Toggler
         createLabel("Record Ghost", {winSize.width / 2 - 55, winSize.height / 2 + 60});
         auto recToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
         recToggle->setPosition({ 65, 60 });
         recToggle->toggle(g_isRecordingEnabled);
         menu->addChild(recToggle);
 
-        // 2. Status Toggler
         createLabel("Show Status", {winSize.width / 2 - 55, winSize.height / 2 + 25});
         auto statToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleStatus), 0.7f);
         statToggle->setPosition({ 65, 25 });
         statToggle->toggle(Mod::get()->getSettingValue<bool>("show-indicator"));
         menu->addChild(statToggle);
 
-        // 3. X Offset Input
         createLabel("X Offset", {winSize.width / 2 - 55, winSize.height / 2 - 10});
         auto offInp = createInput("ghost-offset", {winSize.width / 2 + 65, winSize.height / 2 - 10}, 1);
         m_mainLayer->addChild(offInp);
 
-        // 4. Opacity Input
         createLabel("Opacity (0-100)", {winSize.width / 2 - 55, winSize.height / 2 - 45});
         auto opInp = createInput("ghost-opacity", {winSize.width / 2 + 65, winSize.height / 2 - 45}, 2);
         m_mainLayer->addChild(opInp);
 
-        // Close
         auto closeBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"), this, menu_selector(GhostSettingsLayer::onClose));
         closeBtn->setPosition({ -115, 95 });
         menu->addChild(closeBtn);
@@ -276,7 +272,7 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
             g_currentAttemptData.push_back({ 
                 p1->getPositionX(), p1->getPositionY(),
                 p2 ? p2->getPositionX() : 0.0f, p2 ? p2->getPositionY() : 0.0f,
-                playLayer->m_isDualMode
+                playLayer->m_isDualMode 
             });
         }
         

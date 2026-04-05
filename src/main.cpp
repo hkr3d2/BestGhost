@@ -15,9 +15,10 @@ struct GhostFrame {
 bool g_isRecordingEnabled = false;
 float g_ghostXOffset = -30.0f; // 1 Block Behind
 
-// Global Data (Persists until the game is closed or a new recording starts)
+// Best Run Persistence
 std::vector<GhostFrame> g_bestAttemptData;
 std::vector<GhostFrame> g_currentAttemptData;
+float g_bestXAttained = 0.0f;
 
 /**
  * 1. PlayLayer Hooks
@@ -32,10 +33,8 @@ class $modify(MyPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
 
-        // Turn OFF recording/playback by default when entering a level
-        // But we DO NOT clear g_bestAttemptData here so the ghost is preserved
+        // Reset session-specific flags but KEEP g_bestAttemptData
         g_isRecordingEnabled = false;
-        
         m_fields->m_playbackIndex = 0;
         g_currentAttemptData.clear();
 
@@ -64,15 +63,36 @@ class $modify(MyPlayLayer, PlayLayer) {
 
     void updateUI() {
         if (!m_fields->m_statusLabel) return;
-        m_fields->m_statusLabel->setString(g_isRecordingEnabled ? (g_bestAttemptData.empty() ? "Ghost: RECORDING..." : "Ghost: ACTIVE") : "Ghost: OFF");
-        m_fields->m_statusLabel->setColor(g_isRecordingEnabled ? ccColor3B{0, 255, 255} : ccColor3B{200, 200, 200});
+        
+        if (!g_isRecordingEnabled) {
+            m_fields->m_statusLabel->setString("BestGhost: OFF");
+            m_fields->m_statusLabel->setColor({ 200, 200, 200 });
+        } else {
+            if (g_bestAttemptData.empty()) {
+                m_fields->m_statusLabel->setString("BestGhost: Recording New Best...");
+                m_fields->m_statusLabel->setColor({ 255, 100, 100 }); // Red for first record
+            } else {
+                m_fields->m_statusLabel->setString("BestGhost: Chasing Best");
+                m_fields->m_statusLabel->setColor({ 0, 255, 255 }); // Cyan for active chase
+            }
+        }
     }
 
     void resetLevel() {
         PlayLayer::resetLevel();
+        
         if (g_isRecordingEnabled && !g_currentAttemptData.empty()) {
-            g_bestAttemptData = g_currentAttemptData;
+            float currentMaxX = g_currentAttemptData.back().x;
+
+            // --- THE "BEST" LOGIC ---
+            // Only update the ghost if we went further than the previous record
+            if (currentMaxX > g_bestXAttained) {
+                g_bestXAttained = currentMaxX;
+                g_bestAttemptData = g_currentAttemptData;
+                log::info("BestGhost: New Record! {} units", g_bestXAttained);
+            }
         }
+
         g_currentAttemptData.clear();
         m_fields->m_playbackIndex = 0;
         if (m_fields->m_ghostVisual) m_fields->m_ghostVisual->setVisible(false);
@@ -81,15 +101,13 @@ class $modify(MyPlayLayer, PlayLayer) {
 };
 
 /**
- * 2. PauseLayer Hooks - Precision placement near settings
+ * 2. PauseLayer Hooks
  */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
 
-        auto winSize = CCDirector::get()->getWinSize();
-        
-        // Find the settings menu
+        // Try to find the settings gear menu
         auto menu = this->getChildByID("settings-button-menu");
         
         if (menu) {
@@ -99,22 +117,11 @@ class $modify(MyPauseLayer, PauseLayer) {
             toggler->setID("ghost-toggle"_spr);
             toggler->toggle(g_isRecordingEnabled);
             
-            // Add to the menu
             menu->addChild(toggler);
             
-            // Manual Offset: Push it to the left of the existing buttons
+            // Placed to the left of the gear icon
             toggler->setPosition({-40.0f, 0.0f}); 
-        } else {
-            // Fallback: If no settings menu, put it in the top right
-            auto fallbackMenu = CCMenu::create();
-            fallbackMenu->setPosition({winSize.width - 30.0f, winSize.height - 30.0f});
-            this->addChild(fallbackMenu);
-            
-            auto toggler = CCMenuItemToggler::createWithStandardSprites(
-                this, menu_selector(MyPauseLayer::onToggleGhost), 0.65f
-            );
-            toggler->toggle(g_isRecordingEnabled);
-            fallbackMenu->addChild(toggler);
+            menu->updateLayout();
         }
     }
 
@@ -143,21 +150,29 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto player = playLayer->m_player1;
         if (!player) return;
 
+        // Always record the current attempt
         g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
 
+        // Only playback if we have a "Best" saved
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
         if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
             size_t index = myPL->m_fields->m_playbackIndex;
+            
             if (index < g_bestAttemptData.size()) {
                 myPL->m_fields->m_ghostVisual->setVisible(true);
-                // 1 block behind on X axis
+                // 1 block trail behind
                 myPL->m_fields->m_ghostVisual->setPosition({ 
                     g_bestAttemptData[index].x + g_ghostXOffset, 
                     g_bestAttemptData[index].y 
                 });
                 myPL->m_fields->m_playbackIndex++;
             } else {
+                // If the player survives longer than the ghost, hide the ghost
                 myPL->m_fields->m_ghostVisual->setVisible(false);
+                if (myPL->m_fields->m_statusLabel) {
+                    myPL->m_fields->m_statusLabel->setString("BestGhost: NEW RECORD!");
+                    myPL->m_fields->m_statusLabel->setColor({ 100, 255, 100 }); // Green for improvement
+                }
             }
         }
     }

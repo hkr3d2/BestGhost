@@ -1,9 +1,8 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PlayLayer.hpp>
+#include <Geode/modify/PauseLayer.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <vector>
-#include <fstream>
-#include <filesystem>
 
 using namespace geode::prelude;
 
@@ -12,145 +11,152 @@ struct GhostFrame {
     float y;
 };
 
-// Global session storage
+// Global Settings
+bool g_isRecordingEnabled = false;
+float g_ghostYOffset = 30.0f; // 30 units = 1 Block offset
+
+// Global Data
 std::vector<GhostFrame> g_bestAttemptData;
 std::vector<GhostFrame> g_currentAttemptData;
-float g_bestXAttained = 0.0f;
 
 /**
- * Helper: Get the file path for a specific level's ghost
+ * 1. PlayLayer Hooks
  */
-std::filesystem::path getGhostPath(GJGameLevel* level) {
-    auto ghostDir = Mod::get()->getSaveDir() / "ghosts";
-    if (!std::filesystem::exists(ghostDir)) std::filesystem::create_directories(ghostDir);
-    return ghostDir / (std::to_string(level->m_levelID.value()) + ".dat");
-}
-
 class $modify(MyPlayLayer, PlayLayer) {
     struct Fields {
         CCSprite* m_ghostVisual = nullptr;
         CCLabelBMFont* m_statusLabel = nullptr;
         size_t m_playbackIndex = 0;
-        bool m_hasDiedOnce = false; // The core "Calibration" flag
     };
 
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
-        
-        // Reset global data for the new level entry
-        g_currentAttemptData.clear(); 
-        g_bestAttemptData.clear();
-        g_bestXAttained = 0.0f;
+
         m_fields->m_playbackIndex = 0;
-        m_fields->m_hasDiedOnce = false; 
+        g_currentAttemptData.clear();
 
-        // ID 0 Check (Editor Safety)
-        if (level->m_levelID.value() <= 0) return true;
-
-        // LOAD GHOST FROM DISK
-        auto path = getGhostPath(level);
-        if (std::filesystem::exists(path)) {
-            std::ifstream file(path, std::ios::binary);
-            GhostFrame frame;
-            while (file.read(reinterpret_cast<char*>(&frame), sizeof(GhostFrame))) {
-                g_bestAttemptData.push_back(frame);
-            }
-            if (!g_bestAttemptData.empty()) g_bestXAttained = g_bestAttemptData.back().x;
-        }
-
-        // STATUS LABEL
-        auto label = CCLabelBMFont::create("Calibration: Play to die...", "bigFont.fnt");
-        label->setScale(0.4f);
-        label->setOpacity(150);
-        label->setPosition({ CCDirector::get()->getWinSize().width / 2, 40 });
-        label->setColor({ 255, 255, 100 });
+        // Status Label (Bottom Center)
+        auto label = CCLabelBMFont::create("", "bigFont.fnt");
+        label->setScale(0.35f);
+        label->setOpacity(120);
+        label->setPosition({ CCDirector::get()->getWinSize().width / 2, 25 });
         this->addChild(label, 100);
         m_fields->m_statusLabel = label;
 
-        // GHOST SPRITE
-        auto ghost = CCSprite::createWithSpriteFrameName("GJ_square01_001.png"); 
+        // Ghost Sprite (Cyan Square)
+        auto ghost = CCSprite::createWithSpriteFrameName("GJ_square01_001.png");
         if (ghost) {
             ghost->setScale(0.6f);
-            ghost->setOpacity(130); 
-            ghost->setColor({ 0, 255, 255 }); 
-            ghost->setVisible(false); 
+            ghost->setOpacity(130);
+            ghost->setColor({ 0, 255, 255 });
+            ghost->setVisible(false);
             m_fields->m_ghostVisual = ghost;
             if (this->m_objectLayer) this->m_objectLayer->addChild(ghost, 1000);
         }
 
+        updateUI();
         return true;
+    }
+
+    void updateUI() {
+        if (!m_fields->m_statusLabel) return;
+        if (!g_isRecordingEnabled) {
+            m_fields->m_statusLabel->setString("Ghost: OFF");
+            m_fields->m_statusLabel->setColor({ 200, 200, 200 });
+        } else {
+            m_fields->m_statusLabel->setString(g_bestAttemptData.empty() ? "Ghost: RECORDING..." : "Ghost: ACTIVE");
+            m_fields->m_statusLabel->setColor({ 0, 255, 255 });
+        }
     }
 
     void resetLevel() {
         PlayLayer::resetLevel();
         
-        // If they died, we flip the flag to TRUE
-        // From this point forward, recording and playback are enabled
-        m_fields->m_hasDiedOnce = true;
-
-        // Save Logic: Only if they have already passed calibration
-        if (!g_currentAttemptData.empty()) {
-            float currentMaxX = g_currentAttemptData.back().x;
-            if (currentMaxX > g_bestXAttained) {
-                g_bestXAttained = currentMaxX;
-                g_bestAttemptData = g_currentAttemptData;
-
-                auto path = getGhostPath(this->m_level);
-                std::ofstream file(path, std::ios::binary);
-                for (auto& frame : g_bestAttemptData) {
-                    file.write(reinterpret_cast<const char*>(&frame), sizeof(GhostFrame));
-                }
-            }
+        // If recording is on, move the last attempt to the 'Best' slot
+        if (g_isRecordingEnabled && !g_currentAttemptData.empty()) {
+            g_bestAttemptData = g_currentAttemptData;
         }
 
-        // Reset for the next run
-        g_currentAttemptData.clear(); 
+        g_currentAttemptData.clear();
         m_fields->m_playbackIndex = 0;
         if (m_fields->m_ghostVisual) m_fields->m_ghostVisual->setVisible(false);
+        updateUI();
+    }
+};
+
+/**
+ * 2. PauseLayer Hooks - Adding the Toggle
+ */
+class $modify(MyPauseLayer, PauseLayer) {
+    void customSetup() {
+        PauseLayer::customSetup();
+
+        auto menu = this->getChildByID("right-button-menu");
+        if (!menu) return;
+
+        // Standard Geode Toggler
+        auto toggler = CCMenuItemToggler::createWithStandardSprites(
+            this, menu_selector(MyPauseLayer::onToggleGhost), 0.7f
+        );
+        toggler->setID("ghost-toggle"_spr);
+        toggler->toggle(g_isRecordingEnabled);
         
-        // Update UI
-        if (m_fields->m_statusLabel) {
-            if (g_bestAttemptData.empty()) {
-                m_fields->m_statusLabel->setString("Ghost: Recording...");
-                m_fields->m_statusLabel->setColor({ 255, 100, 100 });
-            } else {
-                m_fields->m_statusLabel->setString("Ghost: Replaying Best");
-                m_fields->m_statusLabel->setColor({ 100, 255, 255 });
-            }
+        menu->addChild(toggler);
+        menu->updateLayout();
+    }
+
+    void onToggleGhost(CCObject* sender) {
+        g_isRecordingEnabled = !static_cast<CCMenuItemToggler*>(sender)->isOn(); // Geode toggler state logic
+        
+        if (!g_isRecordingEnabled) {
+            g_bestAttemptData.clear();
+            g_currentAttemptData.clear();
+        }
+
+        // Auto-Restart logic
+        if (auto pl = PlayLayer::get()) {
+            // Close pause menu and reset
+            this->onResume(nullptr);
+            pl->resetLevel();
         }
     }
 };
 
+/**
+ * 3. Physics/Update Loop
+ */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
         GJBaseGameLayer::update(dt);
         
+        if (!g_isRecordingEnabled) return;
+
         auto playLayer = typeinfo_cast<PlayLayer*>(this);
         if (!playLayer || playLayer->m_isPaused) return;
-        if (playLayer->m_level->m_levelID.value() <= 0) return;
 
         auto player = playLayer->m_player1;
         if (!player) return;
 
+        // 1. Record Frame
+        g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
+
+        // 2. Playback Ghost
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
-
-        // THE KEY CHANGE: 
-        // We only record/play if the first death has already happened.
-        if (myPL->m_fields->m_hasDiedOnce) {
+        if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
+            size_t index = myPL->m_fields->m_playbackIndex;
             
-            // Record
-            g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
-
-            // Playback
-            if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
-                size_t index = myPL->m_fields->m_playbackIndex;
-                if (index < g_bestAttemptData.size()) {
-                    myPL->m_fields->m_ghostVisual->setVisible(true);
-                    myPL->m_fields->m_ghostVisual->setPosition({ g_bestAttemptData[index].x, g_bestAttemptData[index].y });
-                    myPL->m_fields->m_playbackIndex++;
-                } else {
-                    myPL->m_fields->m_ghostVisual->setVisible(false);
-                }
+            if (index < g_bestAttemptData.size()) {
+                myPL->m_fields->m_ghostVisual->setVisible(true);
+                
+                // Position + Y Offset
+                myPL->m_fields->m_ghostVisual->setPosition({ 
+                    g_bestAttemptData[index].x, 
+                    g_bestAttemptData[index].y + g_ghostYOffset 
+                });
+                
+                myPL->m_fields->m_playbackIndex++;
+            } else {
+                myPL->m_fields->m_ghostVisual->setVisible(false);
             }
         }
     }

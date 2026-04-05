@@ -19,7 +19,6 @@ bool g_isRecordingEnabled = false;
 std::vector<GhostFrame> g_bestAttemptData;
 std::vector<GhostFrame> g_currentAttemptData;
 float g_bestXAttained = 0.0f;
-float g_accumulator = 0.0f; // For FPS-independent recording
 
 /**
  * File Management
@@ -106,7 +105,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         PlayLayer::resetLevel();
         if (g_isRecordingEnabled && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
-            if (currentMaxMaxX > g_bestXAttained) {
+            if (currentMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
                 g_bestAttemptData = g_currentAttemptData;
                 saveGhostFile(m_level->m_levelID.value());
@@ -146,7 +145,7 @@ class $modify(MyPauseLayer, PauseLayer) {
 };
 
 /**
- * Update Loop with FPS Correction
+ * Update Loop with Corrected logic
  */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
@@ -161,10 +160,10 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
 
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
 
-        // 1. Record Frame (Using dt ensures we know the actual time passed)
+        // 1. Record current position
         g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
         
-        // Use a persistent counter to track total frames elapsed in this run
+        // Advance the master timer (counts raw frames)
         myPL->m_fields->m_timeCounter += 1.0;
 
         // 2. Playback
@@ -175,13 +174,12 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
 
             int frameShift;
             if (fixFPS) {
-                // At 60 FPS, 1 block is roughly 4 frames. 
-                // We normalize the user's high FPS to a 60 FPS equivalent delay.
-                float currentFPS = 1.0f / dt;
+                // If the player is on high refresh rate, calculate how many extra 
+                // frames they have relative to 60 FPS (approx. 4 frames per block)
+                float currentFPS = (dt > 0) ? (1.0f / dt) : 60.0f;
                 float fpsRatio = currentFPS / 60.0f;
                 frameShift = static_cast<int>(offsetBlocks * 4.0 * fpsRatio);
             } else {
-                // Raw frame delay (legacy)
                 frameShift = static_cast<int>(offsetBlocks * 4.0);
             }
             

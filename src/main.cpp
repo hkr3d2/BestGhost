@@ -96,14 +96,31 @@ class $modify(MyPlayLayer, PlayLayer) {
 
     void updateUI() {
         if (!m_fields->m_statusLabel) return;
+        bool isReplay = Mod::get()->getSettingValue<bool>("replay-mode");
+        bool isSpectate = Mod::get()->getSettingValue<bool>("spectate-mode");
+        
         m_fields->m_statusLabel->setVisible(Mod::get()->getSettingValue<bool>("show-indicator"));
-        m_fields->m_statusLabel->setString(g_isRecordingEnabled ? "BestGhost: ACTIVE" : "BestGhost: OFF");
-        m_fields->m_statusLabel->setColor(g_isRecordingEnabled ? ccColor3B{0, 255, 255} : ccColor3B{200, 200, 200});
+        
+        if (isSpectate) {
+            m_fields->m_statusLabel->setString("MODE: SPECTATING");
+            m_fields->m_statusLabel->setColor({ 255, 200, 0 });
+        } else if (isReplay) {
+            m_fields->m_statusLabel->setString("MODE: REPLAY (NO SAVE)");
+            m_fields->m_statusLabel->setColor({ 100, 255, 100 });
+        } else {
+            m_fields->m_statusLabel->setString(g_isRecordingEnabled ? "BestGhost: RECORDING" : "BestGhost: OFF");
+            m_fields->m_statusLabel->setColor(g_isRecordingEnabled ? ccColor3B{0, 255, 255} : ccColor3B{200, 200, 200});
+        }
     }
 
     void resetLevel() {
         PlayLayer::resetLevel();
-        if (g_isRecordingEnabled && !g_currentAttemptData.empty()) {
+
+        bool isReplay = Mod::get()->getSettingValue<bool>("replay-mode");
+        bool isSpectate = Mod::get()->getSettingValue<bool>("spectate-mode");
+
+        // Only save if NOT in Replay or Spectate mode
+        if (g_isRecordingEnabled && !isReplay && !isSpectate && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
             if (currentMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
@@ -111,6 +128,7 @@ class $modify(MyPlayLayer, PlayLayer) {
                 saveGhostFile(m_level->m_levelID.value());
             }
         }
+
         g_currentAttemptData.clear();
         m_fields->m_timeCounter = 0.0;
         if (m_fields->m_ghostVisual) m_fields->m_ghostVisual->setVisible(false);
@@ -145,13 +163,12 @@ class $modify(MyPauseLayer, PauseLayer) {
 };
 
 /**
- * Update Loop with Corrected logic
+ * Update Loop
  */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
         GJBaseGameLayer::update(dt);
-        if (!g_isRecordingEnabled) return;
-
+        
         auto playLayer = typeinfo_cast<PlayLayer*>(this);
         if (!playLayer || playLayer->m_isPaused) return;
 
@@ -160,39 +177,51 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
 
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
 
-        // 1. Record current position
-        g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
+        bool isReplay = Mod::get()->getSettingValue<bool>("replay-mode");
+        bool isSpectate = Mod::get()->getSettingValue<bool>("spectate-mode");
+
+        // 1. Logic for Recording (Blocked if Replay or Spectate is active)
+        if (g_isRecordingEnabled && !isReplay && !isSpectate) {
+            g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
+        }
         
-        // Advance the master timer (counts raw frames)
         myPL->m_fields->m_timeCounter += 1.0;
 
-        // 2. Playback
+        // 2. Playback Logic
         if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
             
             double offsetBlocks = Mod::get()->getSettingValue<double>("ghost-offset");
             bool fixFPS = Mod::get()->getSettingValue<bool>("fix-fps-offset");
 
-            int frameShift;
-            if (fixFPS) {
-                // If the player is on high refresh rate, calculate how many extra 
-                // frames they have relative to 60 FPS (approx. 4 frames per block)
-                float currentFPS = (dt > 0) ? (1.0f / dt) : 60.0f;
-                float fpsRatio = currentFPS / 60.0f;
-                frameShift = static_cast<int>(offsetBlocks * 4.0 * fpsRatio);
-            } else {
-                frameShift = static_cast<int>(offsetBlocks * 4.0);
+            int frameShift = 0;
+            if (!isSpectate) { // Only apply offset if we are actually racing it
+                if (fixFPS) {
+                    float currentFPS = (dt > 0) ? (1.0f / dt) : 60.0f;
+                    float fpsRatio = currentFPS / 60.0f;
+                    frameShift = static_cast<int>(offsetBlocks * 4.0 * fpsRatio);
+                } else {
+                    frameShift = static_cast<int>(offsetBlocks * 4.0);
+                }
             }
             
             int targetIdx = static_cast<int>(myPL->m_fields->m_timeCounter) + frameShift;
 
             if (targetIdx >= 0 && targetIdx < static_cast<int>(g_bestAttemptData.size())) {
                 myPL->m_fields->m_ghostVisual->setVisible(true);
-                myPL->m_fields->m_ghostVisual->setPosition({ 
-                    g_bestAttemptData[targetIdx].x, 
-                    g_bestAttemptData[targetIdx].y 
-                });
+                
+                auto ghostPos = g_bestAttemptData[targetIdx];
+                myPL->m_fields->m_ghostVisual->setPosition({ ghostPos.x, ghostPos.y });
+
+                // SPECTATE MODE: The player is simply forced to the ghost's position
+                if (isSpectate) {
+                    player->setPosition({ ghostPos.x, ghostPos.y });
+                }
             } else {
                 myPL->m_fields->m_ghostVisual->setVisible(false);
+                // If ghost ends in spectate mode, you probably want to die or stop
+                if (isSpectate && targetIdx >= static_cast<int>(g_bestAttemptData.size())) {
+                    // Ghost finished!
+                }
             }
         }
     }

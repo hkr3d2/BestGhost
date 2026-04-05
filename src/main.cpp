@@ -131,7 +131,7 @@ class $modify(MyPlayLayer, PlayLayer) {
 };
 
 /**
- * Custom Settings Menu using FLAlertLayer (The classic way)
+ * Custom Settings Menu
  */
 class GhostSettingsLayer : public FLAlertLayer {
 public:
@@ -145,12 +145,17 @@ public:
         return nullptr;
     }
 
+    void registerWithTouchDispatcher() override {
+        // Higher priority (lower number) than the PauseLayer to catch touches first
+        CCDirector::get()->getTouchDispatcher()->addTargetedDelegate(this, -500, true);
+    }
+
     bool init(int opacity) {
         if (!FLAlertLayer::init(opacity)) return false;
 
         auto winSize = CCDirector::get()->getWinSize();
         
-        // Background
+        // Background container
         auto bg = CCScale9Sprite::create("GJ_square01.png");
         bg->setContentSize({ 240, 180 });
         bg->setPosition(winSize / 2);
@@ -162,55 +167,54 @@ public:
         title->setScale(0.7f);
         m_mainLayer->addChild(title);
 
-        // Menu for buttons
-        auto menu = CCMenu::create();
-        menu->setZOrder(10);
-        menu->setTouchPriority(-500); // Ensure touches are captured over the pause menu
-        m_mainLayer->addChild(menu);
+        // Menu for buttons (We use the built-in m_buttonMenu for stability)
+        if (m_buttonMenu) {
+            m_buttonMenu->setTouchPriority(-501);
 
-        // Record Run Toggle
-        auto recordLabel = CCLabelBMFont::create("Record Run", "bigFont.fnt");
-        recordLabel->setScale(0.45f);
-        recordLabel->setPosition({ winSize.width / 2 - 45, winSize.height / 2 + 30 });
-        m_mainLayer->addChild(recordLabel);
+            // Record Run Toggle
+            auto recordLabel = CCLabelBMFont::create("Record Run", "bigFont.fnt");
+            recordLabel->setScale(0.45f);
+            recordLabel->setPosition({ winSize.width / 2 - 45, winSize.height / 2 + 30 });
+            m_mainLayer->addChild(recordLabel);
 
-        auto recordToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
-        recordToggle->setPosition({ 60, 30 });
-        recordToggle->toggle(g_isRecordingEnabled);
-        menu->addChild(recordToggle);
+            auto recordToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
+            recordToggle->setPosition({ 60, 30 });
+            recordToggle->toggle(g_isRecordingEnabled);
+            m_buttonMenu->addChild(recordToggle);
 
-        // Replay Mode Toggle
-        auto replayLabel = CCLabelBMFont::create("Replay Only", "bigFont.fnt");
-        replayLabel->setScale(0.45f);
-        replayLabel->setPosition({ winSize.width / 2 - 45, winSize.height / 2 - 10 });
-        m_mainLayer->addChild(replayLabel);
+            // Replay Mode Toggle
+            auto replayLabel = CCLabelBMFont::create("Replay Only", "bigFont.fnt");
+            replayLabel->setScale(0.45f);
+            replayLabel->setPosition({ winSize.width / 2 - 45, winSize.height / 2 - 10 });
+            m_mainLayer->addChild(replayLabel);
 
-        auto replayToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleReplay), 0.7f);
-        replayToggle->setPosition({ 60, -10 });
-        replayToggle->toggle(Mod::get()->getSettingValue<bool>("replay-mode"));
-        menu->addChild(replayToggle);
+            auto replayToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleReplay), 0.7f);
+            replayToggle->setPosition({ 60, -10 });
+            replayToggle->toggle(Mod::get()->getSettingValue<bool>("replay-mode"));
+            m_buttonMenu->addChild(replayToggle);
 
-        // Folder Button
-        auto folderBtn = CCMenuItemSpriteExtra::create(
-            CCSprite::createWithSpriteFrameName("GJ_plainBtn_001.png"),
-            this,
-            menu_selector(GhostSettingsLayer::onOpenFolder)
-        );
-        auto folderIcon = CCSprite::createWithSpriteFrameName("GJ_filesBtn_001.png");
-        folderIcon->setScale(0.75f);
-        folderIcon->setPosition(folderBtn->getContentSize() / 2);
-        folderBtn->addChild(folderIcon);
-        folderBtn->setPosition({ 0, -55 });
-        menu->addChild(folderBtn);
+            // Folder Button
+            auto folderBtn = CCMenuItemSpriteExtra::create(
+                CCSprite::createWithSpriteFrameName("GJ_plainBtn_001.png"),
+                this,
+                menu_selector(GhostSettingsLayer::onOpenFolder)
+            );
+            auto folderIcon = CCSprite::createWithSpriteFrameName("GJ_filesBtn_001.png");
+            folderIcon->setScale(0.75f);
+            folderIcon->setPosition(folderBtn->getContentSize() / 2);
+            folderBtn->addChild(folderIcon);
+            folderBtn->setPosition({ 0, -55 });
+            m_buttonMenu->addChild(folderBtn);
 
-        // Close Button
-        auto closeBtn = CCMenuItemSpriteExtra::create(
-            CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"),
-            this,
-            menu_selector(GhostSettingsLayer::onClose)
-        );
-        closeBtn->setPosition({ -105, 80 });
-        menu->addChild(closeBtn);
+            // Close Button
+            auto closeBtn = CCMenuItemSpriteExtra::create(
+                CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"),
+                this,
+                menu_selector(GhostSettingsLayer::onClose)
+            );
+            closeBtn->setPosition({ -105, 80 });
+            m_buttonMenu->addChild(closeBtn);
+        }
 
         return true;
     }
@@ -237,12 +241,18 @@ public:
     }
 
     void onClose(CCObject*) {
+        this->setKeypadEnabled(false);
         this->setTouchEnabled(false);
         this->removeFromParentAndCleanup(true);
     }
 
     void keyBackClicked() override {
         onClose(nullptr);
+    }
+
+    // Touch logic for targeted delegate
+    bool ccTouchBegan(CCTouch* touch, CCEvent* event) override {
+        return true; // Swallow touches so they don't hit the pause menu behind us
     }
 };
 

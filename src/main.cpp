@@ -60,9 +60,10 @@ void loadGhostFile(int levelID) {
  * PlayerObject Hooks for Invincibility
  */
 class $modify(PlayerObject) {
-    void playerWillDie(bool p0) {
+    // playerDestroyed is the correct name for death logic in Geode 2.2
+    void playerDestroyed(bool p0) {
         if (Mod::get()->getSettingValue<bool>("spectate-mode")) return;
-        PlayerObject::playerWillDie(p0);
+        PlayerObject::playerDestroyed(p0);
     }
 };
 
@@ -226,13 +227,22 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         }
     }
 
-    void pushButton(int p0, bool p1) {
+    void handleButton(bool down, int button, bool isPlayer1) {
         if (Mod::get()->getSettingValue<bool>("spectate-mode")) return;
-        GJBaseGameLayer::pushButton(p0, p1);
-    }
-
-    void releaseButton(int p0, bool p1) {
-        if (Mod::get()->getSettingValue<bool>("spectate-mode")) return;
-        GJBaseGameLayer::releaseButton(p0, p1);
+        GJBaseGameLayer::handleButton(down, button, isPlayer1);
     }
 };
+
+/**
+ * Library Listener
+ */
+$execute {
+    listenForSettingChanges<bool>("open-library", [](bool value) {
+        if (value) {
+            auto path = Mod::get()->getSaveDir() / "ghosts";
+            if (!fs::exists(path)) fs::create_directories(path);
+            utils::file::openFolder(path);
+            Mod::get()->setSettingValue("open-library", false);
+        }
+    });
+}

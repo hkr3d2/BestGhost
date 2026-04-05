@@ -18,7 +18,7 @@
         "name": "Ghost X-Offset",
         "description": "How far behind the ghost is (negative is behind).",
         "type": "float",
-        "default": -30.0
+        "default": -1.0
     },
     "show-indicator": {
         "name": "Show Status Label",

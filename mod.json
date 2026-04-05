@@ -44,7 +44,8 @@
     "open-library": {
         "name": "Open Ghost Library",
         "description": "Click to open the folder where .ghst files are stored.",
-        "type": "custom"
+        "type": "bool",
+        "default": false
         }
     }
 }

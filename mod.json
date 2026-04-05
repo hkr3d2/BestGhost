@@ -14,6 +14,15 @@
     "tags": ["gameplay", "practice"],
     "dependencies": {},
    "settings": {
+       "ghost-slot": {
+        "name": "Active Ghost Slot",
+        "description": "Which ghost to race against (1 = Best, 5 = 5th Best).",
+        "type": "int",
+        "default": 1,
+        "min": 1,
+        "max": 5,
+        "control": "slider"
+    },
     "ghost-offset": {
         "name": "Ghost X-Offset",
         "description": "How far behind the ghost is (negative is behind).",

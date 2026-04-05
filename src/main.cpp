@@ -21,6 +21,44 @@ std::vector<GhostFrame> g_currentAttemptData;
 float g_bestXAttained = 0.0f;
 
 /**
+ * Data Persistence Helpers
+ */
+void saveGhostData(int levelID) {
+    if (g_bestAttemptData.empty()) return;
+
+    // We store the data as a string of floats: "x1,y1|x2,y2|..."
+    std::string encoded;
+    for (const auto& frame : g_bestAttemptData) {
+        encoded += std::to_string(frame.x) + "," + std::to_string(frame.y) + "|";
+    }
+
+    std::string key = "best_ghost_" + std::to_string(levelID);
+    Mod::get()->setSavedValue<std::string>(key, encoded);
+    Mod::get()->setSavedValue<float>(key + "_dist", g_bestXAttained);
+}
+
+void loadGhostData(int levelID) {
+    g_bestAttemptData.clear();
+    std::string key = "best_ghost_" + std::to_string(levelID);
+    
+    g_bestXAttained = Mod::get()->getSavedValue<float>(key + "_dist", 0.0f);
+    std::string encoded = Mod::get()->getSavedValue<std::string>(key, "");
+
+    if (encoded.empty()) return;
+
+    std::stringstream ss(encoded);
+    std::string segment;
+    while (std::getline(ss, segment, '|')) {
+        size_t comma = segment.find(',');
+        if (comma != std::string::npos) {
+            float x = std::static_pointer_cast<float>(std::stof(segment.substr(0, comma)));
+            float y = std::static_pointer_cast<float>(std::stof(segment.substr(comma + 1)));
+            g_bestAttemptData.push_back({x, y});
+        }
+    }
+}
+
+/**
  * 1. PlayLayer Hooks
  */
 class $modify(MyPlayLayer, PlayLayer) {
@@ -33,12 +71,13 @@ class $modify(MyPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
 
-        // Reset state for new level entry
+        // Load saved ghost for this specific level
+        loadGhostData(level->m_levelID.value());
+
         g_isRecordingEnabled = false;
         m_fields->m_playbackIndex = 0;
         g_currentAttemptData.clear();
 
-        // Status Label
         auto label = CCLabelBMFont::create("", "bigFont.fnt");
         label->setScale(0.35f);
         label->setOpacity(120);
@@ -46,7 +85,6 @@ class $modify(MyPlayLayer, PlayLayer) {
         this->addChild(label, 100);
         m_fields->m_statusLabel = label;
 
-        // Ghost Sprite
         auto ghost = CCSprite::createWithSpriteFrameName("GJ_square01_001.png");
         if (ghost) {
             ghost->setScale(0.6f);
@@ -78,10 +116,12 @@ class $modify(MyPlayLayer, PlayLayer) {
         if (g_isRecordingEnabled && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
 
-            // Update only if this was the BEST run so far
             if (currentMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
                 g_bestAttemptData = g_currentAttemptData;
+                
+                // Save immediately when a new best is reached
+                saveGhostData(m_level->m_levelID.value());
             }
         }
 
@@ -93,13 +133,12 @@ class $modify(MyPlayLayer, PlayLayer) {
 };
 
 /**
- * 2. PauseLayer Hooks - Manual Positioning to protect main buttons
+ * 2. PauseLayer Hooks
  */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
 
-        // Target the settings menu
         auto menu = this->getChildByID("settings-button-menu");
         if (!menu) menu = this->getChildByID("right-button-menu");
         if (!menu) menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
@@ -110,13 +149,9 @@ class $modify(MyPauseLayer, PauseLayer) {
             );
             toggler->setID("ghost-toggle"_spr);
             toggler->toggle(g_isRecordingEnabled);
-            
-            // Add to menu normally
             menu->addChild(toggler);
 
-            // Manual positioning: 
-            // We do NOT call setLayout. We just nudge the toggler 
-            // relative to the menu's center point.
+            // Using your exact working coordinates
             toggler->setPosition({249, 116.0f}); 
         }
     }

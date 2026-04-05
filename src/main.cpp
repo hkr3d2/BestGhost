@@ -15,7 +15,7 @@ struct GhostFrame {
 };
 
 // Global State
-bool g_isRecordingEnabled = false; // Always starts false for a new session
+bool g_isRecordingEnabled = false; 
 std::vector<GhostFrame> g_bestAttemptData;
 std::vector<GhostFrame> g_currentAttemptData;
 float g_bestXAttained = 0.0f;
@@ -70,9 +70,11 @@ class $modify(MyPlayLayer, PlayLayer) {
 
         loadGhostFile(level->m_levelID.value());
         
-        // CRITICAL: Reset recording to false every time a level starts
+        // Always reset to false on level start
         g_isRecordingEnabled = false; 
-        
+        // Sync the setting to match the global flag so the menu doesn't look "on" when it's "off"
+        Mod::get()->setSettingValue("ghost-recording", false);
+
         m_fields->m_timeCounter = 0.0;
         g_currentAttemptData.clear();
 
@@ -107,7 +109,6 @@ class $modify(MyPlayLayer, PlayLayer) {
             m_fields->m_statusLabel->setString("MODE: REPLAY (NO SAVE)");
             m_fields->m_statusLabel->setColor({ 100, 255, 100 });
         } else {
-            // Uses the global flag that the user must manually toggle
             m_fields->m_statusLabel->setString(g_isRecordingEnabled ? "BestGhost: RECORDING" : "BestGhost: OFF");
             m_fields->m_statusLabel->setColor(g_isRecordingEnabled ? ccColor3B{0, 255, 255} : ccColor3B{200, 200, 200});
         }
@@ -161,6 +162,7 @@ class $modify(MyPauseLayer, PauseLayer) {
     }
 
     void onOpenGhostSettings(CCObject* sender) {
+        // Correct way to open the mod settings menu in Geode
         geode::openSettings(Mod::get());
     }
 };
@@ -179,10 +181,8 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         if (!player) return;
 
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
-
         bool isReplay = Mod::get()->getSettingValue<bool>("replay-mode");
 
-        // Uses the volatile global flag
         if (g_isRecordingEnabled && !isReplay) {
             g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
         }
@@ -219,7 +219,6 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
  * Settings Change Listener
  */
 $execute {
-    // When the setting "ghost-recording" is toggled in the menu, update the GLOBAL flag
     listenForSettingChanges<bool>("ghost-recording", [](bool value) {
         g_isRecordingEnabled = value;
         if (auto pl = PlayLayer::get()) {

@@ -70,9 +70,10 @@ class $modify(MyPlayLayer, PlayLayer) {
 
         loadGhostFile(level->m_levelID.value());
         
-        // Always reset to false on level start
+        // Reset volatile flag
         g_isRecordingEnabled = false; 
-        // Sync the setting to match the global flag so the menu doesn't look "on" when it's "off"
+        
+        // Ensure the setting toggle in the menu matches the reset state
         Mod::get()->setSettingValue("ghost-recording", false);
 
         m_fields->m_timeCounter = 0.0;
@@ -162,8 +163,8 @@ class $modify(MyPauseLayer, PauseLayer) {
     }
 
     void onOpenGhostSettings(CCObject* sender) {
-        // Correct way to open the mod settings menu in Geode
-        geode::openSettings(Mod::get());
+        // Calling it via the global namespace to avoid the 'get' parsing error
+        ::openSettings(Mod::get());
     }
 };
 

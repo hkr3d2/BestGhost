@@ -83,6 +83,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         auto gm = GameManager::sharedState();
         auto ghost = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
         if (ghost) {
+            // Pull opacity from Mod Settings (0-100 scale)
             double opSetting = Mod::get()->getSettingValue<double>("ghost-opacity");
             ghost->setOpacity(static_cast<uint8_t>(opSetting * 2.55));
             ghost->setVisible(false);
@@ -124,11 +125,11 @@ class $modify(MyPlayLayer, PlayLayer) {
 };
 
 /**
- * Custom Settings Menu
+ * Custom Settings Menu (Simplified: No Opacity Box)
  */
 class GhostSettingsLayer : public FLAlertLayer, public TextInputDelegate {
 protected:
-    std::vector<CCTextInputNode*> m_inputs;
+    CCTextInputNode* m_offsetInput = nullptr;
 
 public:
     static GhostSettingsLayer* create() {
@@ -150,7 +151,7 @@ public:
 
         auto winSize = CCDirector::get()->getWinSize();
         auto bg = CCScale9Sprite::create("GJ_square01.png");
-        bg->setContentSize({ 250, 210 });
+        bg->setContentSize({ 250, 160 });
         bg->setPosition(winSize / 2);
         m_mainLayer->addChild(bg);
 
@@ -159,32 +160,33 @@ public:
         m_mainLayer->addChild(menu);
 
         // Record Toggle
-        createLabel("Record Ghost", {winSize.width / 2 - 50, winSize.height / 2 + 55});
+        createLabel("Record Ghost", {winSize.width / 2 - 50, winSize.height / 2 + 40});
         auto recToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
-        recToggle->setPosition({ 60, 55 });
+        recToggle->setPosition({ 60, 40 });
         recToggle->toggle(g_isRecordingEnabled);
         menu->addChild(recToggle);
 
         // Status Toggle
-        createLabel("Show Status", {winSize.width / 2 - 50, winSize.height / 2 + 20});
+        createLabel("Show Status", {winSize.width / 2 - 50, winSize.height / 2 + 5});
         auto statToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleStatus), 0.7f);
-        statToggle->setPosition({ 60, 20 });
+        statToggle->setPosition({ 60, 5 });
         statToggle->toggle(Mod::get()->getSettingValue<bool>("show-indicator"));
         menu->addChild(statToggle);
 
         // X Offset
-        createLabel("X Offset", {winSize.width / 2 - 50, winSize.height / 2 - 15});
-        auto offInp = createInput("ghost-offset", {winSize.width / 2 + 60, winSize.height / 2 - 15}, 1);
-        m_mainLayer->addChild(offInp);
-
-        // Opacity
-        createLabel("Opacity (0-100)", {winSize.width / 2 - 50, winSize.height / 2 - 50});
-        auto opInp = createInput("ghost-opacity", {winSize.width / 2 + 60, winSize.height / 2 - 50}, 2);
-        m_mainLayer->addChild(opInp);
+        createLabel("X Offset", {winSize.width / 2 - 50, winSize.height / 2 - 30});
+        m_offsetInput = CCTextInputNode::create(60.f, 20.f, "0", "bigFont.fnt");
+        m_offsetInput->setAllowedChars("0123456789.-");
+        m_offsetInput->setDelegate(this);
+        
+        double val = Mod::get()->getSettingValue<double>("ghost-offset");
+        m_offsetInput->setString(std::to_string(val).substr(0, 5).c_str());
+        m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 30});
+        m_mainLayer->addChild(m_offsetInput);
 
         // Close
         auto closeBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"), this, menu_selector(GhostSettingsLayer::onClose));
-        closeBtn->setPosition({ -110, 90 });
+        closeBtn->setPosition({ -110, 65 });
         menu->addChild(closeBtn);
 
         return true;
@@ -195,21 +197,6 @@ public:
         lbl->setScale(0.4f);
         lbl->setPosition(pos);
         m_mainLayer->addChild(lbl);
-    }
-
-    CCTextInputNode* createInput(std::string setting, CCPoint pos, int tag) {
-        auto input = CCTextInputNode::create(50.f, 20.f, "0", "bigFont.fnt");
-        input->setAllowedChars("0123456789.-");
-        input->setDelegate(this);
-        input->setTag(tag);
-        
-        double val = Mod::get()->getSettingValue<double>(setting);
-        std::string s = std::to_string(val);
-        input->setString(s.substr(0, s.find('.') + 3).c_str());
-        
-        input->setPosition(pos);
-        m_inputs.push_back(input);
-        return input;
     }
 
     void onToggleRecord(CCObject* sender) {
@@ -225,15 +212,9 @@ public:
     void textChanged(CCTextInputNode* input) override {
         std::string str = input->getString();
         if (str.empty() || str == "-" || str == ".") return;
-
         try {
             double val = std::stod(str);
-            if (input->getTag() == 1) {
-                Mod::get()->setSettingValue("ghost-offset", val);
-            } else if (input->getTag() == 2) {
-                val = std::max(0.0, std::min(100.0, val));
-                Mod::get()->setSettingValue("ghost-opacity", val);
-            }
+            Mod::get()->setSettingValue("ghost-offset", val);
             refreshPlayLayer();
         } catch (...) {}
     }
@@ -243,10 +224,9 @@ public:
     }
 
     void onClose(CCObject*) {
-        // Prevent crash: force all inputs to detach before deleting the layer
-        for (auto inp : m_inputs) {
-            inp->setDelegate(nullptr);
-            inp->onClickTrackNode(false);
+        if (m_offsetInput) {
+            m_offsetInput->setDelegate(nullptr);
+            m_offsetInput->onClickTrackNode(false);
         }
         this->removeFromParentAndCleanup(true);
     }

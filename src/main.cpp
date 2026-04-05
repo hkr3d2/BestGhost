@@ -4,6 +4,7 @@
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <vector>
 #include <fstream>
+#include <string>
 #include <filesystem>
 
 using namespace geode::prelude;
@@ -67,10 +68,8 @@ class $modify(MyPlayLayer, PlayLayer) {
 
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
-
         loadGhostFile(level->m_levelID.value());
         g_isRecordingEnabled = false; 
-
         m_fields->m_timeCounter = 0.0;
         g_currentAttemptData.clear();
 
@@ -97,24 +96,14 @@ class $modify(MyPlayLayer, PlayLayer) {
 
     void updateUI() {
         if (!m_fields->m_statusLabel) return;
-        bool isReplay = Mod::get()->getSettingValue<bool>("replay-mode");
-        
         m_fields->m_statusLabel->setVisible(Mod::get()->getSettingValue<bool>("show-indicator"));
-        
-        if (isReplay) {
-            m_fields->m_statusLabel->setString("MODE: REPLAY (NO SAVE)");
-            m_fields->m_statusLabel->setColor({ 100, 255, 100 });
-        } else {
-            m_fields->m_statusLabel->setString(g_isRecordingEnabled ? "BestGhost: RECORDING" : "BestGhost: OFF");
-            m_fields->m_statusLabel->setColor(g_isRecordingEnabled ? ccColor3B{0, 255, 255} : ccColor3B{200, 200, 200});
-        }
+        m_fields->m_statusLabel->setString(g_isRecordingEnabled ? "BestGhost: RECORDING" : "BestGhost: OFF");
+        m_fields->m_statusLabel->setColor(g_isRecordingEnabled ? ccColor3B{0, 255, 255} : ccColor3B{200, 200, 200});
     }
 
     void resetLevel() {
         PlayLayer::resetLevel();
-        bool isReplay = Mod::get()->getSettingValue<bool>("replay-mode");
-
-        if (g_isRecordingEnabled && !isReplay && !g_currentAttemptData.empty()) {
+        if (g_isRecordingEnabled && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
             if (currentMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
@@ -122,7 +111,6 @@ class $modify(MyPlayLayer, PlayLayer) {
                 saveGhostFile(m_level->m_levelID.value());
             }
         }
-
         g_currentAttemptData.clear();
         m_fields->m_timeCounter = 0.0;
         if (m_fields->m_ghostVisual) m_fields->m_ghostVisual->setVisible(false);
@@ -133,7 +121,7 @@ class $modify(MyPlayLayer, PlayLayer) {
 /**
  * Custom Settings Menu
  */
-class GhostSettingsLayer : public FLAlertLayer {
+class GhostSettingsLayer : public FLAlertLayer, public TextInputDelegate {
 public:
     static GhostSettingsLayer* create() {
         auto ret = new GhostSettingsLayer();
@@ -145,147 +133,111 @@ public:
         return nullptr;
     }
 
-    void registerWithTouchDispatcher() override {
-        // Higher priority (lower number) than the PauseLayer to catch touches first
-        CCDirector::get()->getTouchDispatcher()->addTargetedDelegate(this, -500, true);
-    }
-
     bool init(int opacity) {
         if (!FLAlertLayer::init(opacity)) return false;
 
         auto winSize = CCDirector::get()->getWinSize();
         
-        // Background container
         auto bg = CCScale9Sprite::create("GJ_square01.png");
-        bg->setContentSize({ 240, 180 });
+        bg->setContentSize({ 240, 200 });
         bg->setPosition(winSize / 2);
         m_mainLayer->addChild(bg);
 
-        // Title
-        auto title = CCLabelBMFont::create("Ghost Settings", "goldFont.fnt");
-        title->setPosition({ winSize.width / 2, winSize.height / 2 + 70 });
-        title->setScale(0.7f);
-        m_mainLayer->addChild(title);
+        auto menu = CCMenu::create();
+        m_mainLayer->addChild(menu);
 
-        // Menu for buttons (We use the built-in m_buttonMenu for stability)
-        if (m_buttonMenu) {
-            m_buttonMenu->setTouchPriority(-501);
+        // 1. Ghost Record Toggler
+        auto recordLabel = CCLabelBMFont::create("Record Ghost", "bigFont.fnt");
+        recordLabel->setScale(0.45f);
+        recordLabel->setPosition(winSize.width / 2 - 50, winSize.height / 2 + 50);
+        m_mainLayer->addChild(recordLabel);
 
-            // Record Run Toggle
-            auto recordLabel = CCLabelBMFont::create("Record Run", "bigFont.fnt");
-            recordLabel->setScale(0.45f);
-            recordLabel->setPosition({ winSize.width / 2 - 45, winSize.height / 2 + 30 });
-            m_mainLayer->addChild(recordLabel);
+        auto recordToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
+        recordToggle->setPosition({ 60, 50 });
+        recordToggle->toggle(g_isRecordingEnabled);
+        menu->addChild(recordToggle);
 
-            auto recordToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
-            recordToggle->setPosition({ 60, 30 });
-            recordToggle->toggle(g_isRecordingEnabled);
-            m_buttonMenu->addChild(recordToggle);
+        // 2. Status Label Toggler
+        auto statusLabelTxt = CCLabelBMFont::create("Show Status", "bigFont.fnt");
+        statusLabelTxt->setScale(0.45f);
+        statusLabelTxt->setPosition(winSize.width / 2 - 50, winSize.height / 2 + 10);
+        m_mainLayer->addChild(statusLabelTxt);
 
-            // Replay Mode Toggle
-            auto replayLabel = CCLabelBMFont::create("Replay Only", "bigFont.fnt");
-            replayLabel->setScale(0.45f);
-            replayLabel->setPosition({ winSize.width / 2 - 45, winSize.height / 2 - 10 });
-            m_mainLayer->addChild(replayLabel);
+        auto statusToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleStatus), 0.7f);
+        statusToggle->setPosition({ 60, 10 });
+        statusToggle->toggle(Mod::get()->getSettingValue<bool>("show-indicator"));
+        menu->addChild(statusToggle);
 
-            auto replayToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleReplay), 0.7f);
-            replayToggle->setPosition({ 60, -10 });
-            replayToggle->toggle(Mod::get()->getSettingValue<bool>("replay-mode"));
-            m_buttonMenu->addChild(replayToggle);
+        // 3. Offset Textbox
+        auto offsetLabel = CCLabelBMFont::create("X Offset", "bigFont.fnt");
+        offsetLabel->setScale(0.45f);
+        offsetLabel->setPosition(winSize.width / 2 - 50, winSize.height / 2 - 30);
+        m_mainLayer->addChild(offsetLabel);
 
-            // Folder Button
-            auto folderBtn = CCMenuItemSpriteExtra::create(
-                CCSprite::createWithSpriteFrameName("GJ_plainBtn_001.png"),
-                this,
-                menu_selector(GhostSettingsLayer::onOpenFolder)
-            );
-            auto folderIcon = CCSprite::createWithSpriteFrameName("GJ_filesBtn_001.png");
-            folderIcon->setScale(0.75f);
-            folderIcon->setPosition(folderBtn->getContentSize() / 2);
-            folderBtn->addChild(folderIcon);
-            folderBtn->setPosition({ 0, -55 });
-            m_buttonMenu->addChild(folderBtn);
+        auto input = CCTextInputNode::create(60.f, 20.f, "0.0", "bigFont.fnt");
+        input->setLabelPlaceholderColor({ 150, 150, 150 });
+        input->setAllowedChars("0123456789.-");
+        input->setDelegate(this);
+        input->setString(std::to_string(Mod::get()->getSettingValue<double>("ghost-offset")).substr(0, 4).c_str());
+        input->setPosition(winSize.width / 2 + 55, winSize.height / 2 - 30);
+        m_mainLayer->addChild(input);
 
-            // Close Button
-            auto closeBtn = CCMenuItemSpriteExtra::create(
-                CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"),
-                this,
-                menu_selector(GhostSettingsLayer::onClose)
-            );
-            closeBtn->setPosition({ -105, 80 });
-            m_buttonMenu->addChild(closeBtn);
-        }
+        // Close Button
+        auto closeBtn = CCMenuItemSpriteExtra::create(
+            CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"),
+            this,
+            menu_selector(GhostSettingsLayer::onClose)
+        );
+        closeBtn->setPosition({ -105, 85 });
+        menu->addChild(closeBtn);
 
         return true;
     }
 
     void onToggleRecord(CCObject* sender) {
         g_isRecordingEnabled = !static_cast<CCMenuItemToggler*>(sender)->isOn();
-        if (auto pl = PlayLayer::get()) {
-            static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
-        }
+        if (auto pl = PlayLayer::get()) static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
     }
 
-    void onToggleReplay(CCObject* sender) {
+    void onToggleStatus(CCObject* sender) {
         bool val = !static_cast<CCMenuItemToggler*>(sender)->isOn();
-        Mod::get()->setSettingValue("replay-mode", val);
-        if (auto pl = PlayLayer::get()) {
-            static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
-        }
+        Mod::get()->setSettingValue("show-indicator", val);
+        if (auto pl = PlayLayer::get()) static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
     }
 
-    void onOpenFolder(CCObject*) {
-        auto path = Mod::get()->getSaveDir() / "ghosts";
-        if (!fs::exists(path)) fs::create_directories(path);
-        utils::file::openFolder(path);
+    void textChanged(CCTextInputNode* input) override {
+        try {
+            double val = std::stod(input->getString());
+            Mod::get()->setSettingValue("ghost-offset", val);
+        } catch (...) {}
     }
 
     void onClose(CCObject*) {
-        this->setKeypadEnabled(false);
-        this->setTouchEnabled(false);
         this->removeFromParentAndCleanup(true);
-    }
-
-    void keyBackClicked() override {
-        onClose(nullptr);
-    }
-
-    // Touch logic for targeted delegate
-    bool ccTouchBegan(CCTouch* touch, CCEvent* event) override {
-        return true; // Swallow touches so they don't hit the pause menu behind us
     }
 };
 
 /**
- * PauseLayer Hooks
+ * PauseLayer Hook
  */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
-        
         auto menu = this->getChildByID("right-button-menu");
         if (!menu) menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
-        
         if (menu) {
-            auto settingsSprite = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png");
-            settingsSprite->setScale(0.7f);
-
             auto settingsBtn = CCMenuItemSpriteExtra::create(
-                settingsSprite,
+                CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png"),
                 this,
                 menu_selector(MyPauseLayer::onOpenCustomGhostMenu)
             );
-            
-            settingsBtn->setID("ghost-settings-btn"_spr);
+            settingsBtn->setScale(0.7f);
             menu->addChild(settingsBtn);
-            settingsBtn->setPosition({249.0f, 116.0f}); 
             menu->updateLayout();
         }
     }
-
-    void onOpenCustomGhostMenu(CCObject* sender) {
-        auto layer = GhostSettingsLayer::create();
-        CCDirector::get()->getRunningScene()->addChild(layer, 100);
+    void onOpenCustomGhostMenu(CCObject*) {
+        GhostSettingsLayer::create()->show();
     }
 };
 
@@ -295,41 +247,25 @@ class $modify(MyPauseLayer, PauseLayer) {
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
         GJBaseGameLayer::update(dt);
-        
         auto playLayer = typeinfo_cast<PlayLayer*>(this);
         if (!playLayer || playLayer->m_isPaused) return;
 
         auto player = playLayer->m_player1;
-        if (!player) return;
-
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
-        bool isReplay = Mod::get()->getSettingValue<bool>("replay-mode");
 
-        if (g_isRecordingEnabled && !isReplay) {
+        if (g_isRecordingEnabled) {
             g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
         }
         
         myPL->m_fields->m_timeCounter += 1.0;
 
         if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
-            double offsetBlocks = Mod::get()->getSettingValue<double>("ghost-offset");
-            bool fixFPS = Mod::get()->getSettingValue<bool>("fix-fps-offset");
-
-            int frameShift;
-            if (fixFPS) {
-                float currentFPS = (dt > 0) ? (1.0f / dt) : 60.0f;
-                float fpsRatio = currentFPS / 60.0f;
-                frameShift = static_cast<int>(offsetBlocks * 4.0 * fpsRatio);
-            } else {
-                frameShift = static_cast<int>(offsetBlocks * 4.0);
-            }
-            
-            int targetIdx = static_cast<int>(myPL->m_fields->m_timeCounter) + frameShift;
+            double offset = Mod::get()->getSettingValue<double>("ghost-offset");
+            int targetIdx = static_cast<int>(myPL->m_fields->m_timeCounter + (offset * 4.0));
 
             if (targetIdx >= 0 && targetIdx < static_cast<int>(g_bestAttemptData.size())) {
                 myPL->m_fields->m_ghostVisual->setVisible(true);
-                auto ghostPos = g_bestAttemptData[targetIdx];
-                myPL->m_fields->m_ghostVisual->setPosition({ ghostPos.x, ghostPos.y });
+                myPL->m_fields->m_ghostVisual->setPosition({ g_bestAttemptData[targetIdx].x, g_bestAttemptData[targetIdx].y });
             } else {
                 myPL->m_fields->m_ghostVisual->setVisible(false);
             }

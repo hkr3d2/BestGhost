@@ -14,6 +14,12 @@
     "tags": ["gameplay", "practice"],
     "dependencies": {},
    "settings": {
+       "ghost-recording": {
+        "name": "Record Ghost",
+        "description": "Enable recording of your best runs.",
+        "type": "bool",
+        "default": true
+    },
        "fix-fps-offset": {
         "name": "Fix Offset Issues (60 FPS)",
         "description": "Ensures the offset remains consistent regardless of your monitor's refresh rate.",

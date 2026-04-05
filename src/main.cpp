@@ -19,6 +19,7 @@ bool g_isRecordingEnabled = false;
 std::vector<GhostFrame> g_bestAttemptData;
 std::vector<GhostFrame> g_currentAttemptData;
 float g_bestXAttained = 0.0f;
+float g_accumulator = 0.0f; // For FPS-independent recording
 
 /**
  * File Management
@@ -62,7 +63,7 @@ class $modify(MyPlayLayer, PlayLayer) {
     struct Fields {
         CCSprite* m_ghostVisual = nullptr;
         CCLabelBMFont* m_statusLabel = nullptr;
-        size_t m_playbackIndex = 0;
+        double m_timeCounter = 0.0;
     };
 
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
@@ -70,7 +71,7 @@ class $modify(MyPlayLayer, PlayLayer) {
 
         loadGhostFile(level->m_levelID.value());
         g_isRecordingEnabled = false;
-        m_fields->m_playbackIndex = 0;
+        m_fields->m_timeCounter = 0.0;
         g_currentAttemptData.clear();
 
         auto label = CCLabelBMFont::create("", "bigFont.fnt");
@@ -105,14 +106,14 @@ class $modify(MyPlayLayer, PlayLayer) {
         PlayLayer::resetLevel();
         if (g_isRecordingEnabled && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
-            if (currentMaxX > g_bestXAttained) {
+            if (currentMaxMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
                 g_bestAttemptData = g_currentAttemptData;
                 saveGhostFile(m_level->m_levelID.value());
             }
         }
         g_currentAttemptData.clear();
-        m_fields->m_playbackIndex = 0;
+        m_fields->m_timeCounter = 0.0;
         if (m_fields->m_ghostVisual) m_fields->m_ghostVisual->setVisible(false);
         updateUI();
     }
@@ -124,19 +125,12 @@ class $modify(MyPlayLayer, PlayLayer) {
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
-        
         auto menu = this->getChildByID("right-button-menu");
         if (!menu) menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
-
         if (menu) {
-            auto toggler = CCMenuItemToggler::createWithStandardSprites(
-                this, 
-                menu_selector(MyPauseLayer::onToggleGhost), 
-                0.6f
-            );
+            auto toggler = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(MyPauseLayer::onToggleGhost), 0.6f);
             toggler->setID("ghost-toggle"_spr);
             toggler->toggle(g_isRecordingEnabled);
-            
             menu->addChild(toggler);
             toggler->setPosition({249.0f, 116.0f}); 
             menu->updateLayout();
@@ -152,7 +146,7 @@ class $modify(MyPauseLayer, PauseLayer) {
 };
 
 /**
- * Update Loop with Block-to-Unit conversion
+ * Update Loop with FPS Correction
  */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
@@ -165,26 +159,40 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto player = playLayer->m_player1;
         if (!player) return;
 
-        // 1. Record Frame
+        auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
+
+        // 1. Record Frame (Using dt ensures we know the actual time passed)
         g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
+        
+        // Use a persistent counter to track total frames elapsed in this run
+        myPL->m_fields->m_timeCounter += 1.0;
 
         // 2. Playback
-        auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
         if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
-            size_t idx = myPL->m_fields->m_playbackIndex;
+            
+            double offsetBlocks = Mod::get()->getSettingValue<double>("ghost-offset");
+            bool fixFPS = Mod::get()->getSettingValue<bool>("fix-fps-offset");
 
-            if (idx < g_bestAttemptData.size()) {
-                // Get offset in blocks and multiply by 30 (1 block = 30 units)
-                double offsetBlocks = Mod::get()->getSettingValue<double>("ghost-offset");
-                float finalXOffset = static_cast<float>(offsetBlocks) * 30.0f;
-                
+            int frameShift;
+            if (fixFPS) {
+                // At 60 FPS, 1 block is roughly 4 frames. 
+                // We normalize the user's high FPS to a 60 FPS equivalent delay.
+                float currentFPS = 1.0f / dt;
+                float fpsRatio = currentFPS / 60.0f;
+                frameShift = static_cast<int>(offsetBlocks * 4.0 * fpsRatio);
+            } else {
+                // Raw frame delay (legacy)
+                frameShift = static_cast<int>(offsetBlocks * 4.0);
+            }
+            
+            int targetIdx = static_cast<int>(myPL->m_fields->m_timeCounter) + frameShift;
+
+            if (targetIdx >= 0 && targetIdx < static_cast<int>(g_bestAttemptData.size())) {
                 myPL->m_fields->m_ghostVisual->setVisible(true);
                 myPL->m_fields->m_ghostVisual->setPosition({ 
-                    g_bestAttemptData[idx].x + finalXOffset, 
-                    g_bestAttemptData[idx].y 
+                    g_bestAttemptData[targetIdx].x, 
+                    g_bestAttemptData[targetIdx].y 
                 });
-                
-                myPL->m_fields->m_playbackIndex++;
             } else {
                 myPL->m_fields->m_ghostVisual->setVisible(false);
             }

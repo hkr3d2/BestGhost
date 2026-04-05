@@ -83,9 +83,8 @@ class $modify(MyPlayLayer, PlayLayer) {
         auto gm = GameManager::sharedState();
         auto ghost = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
         if (ghost) {
-            // Pull opacity from Mod Settings (0-100 scale)
-            double opSetting = Mod::get()->getSettingValue<double>("ghost-opacity");
-            ghost->setOpacity(static_cast<uint8_t>(opSetting * 2.55));
+            // Fixed 30% Opacity (0.3 * 255 = ~76)
+            ghost->setOpacity(76);
             ghost->setVisible(false);
             m_fields->m_ghostVisual = ghost;
             if (this->m_objectLayer) this->m_objectLayer->addChild(ghost, 1000);
@@ -100,11 +99,6 @@ class $modify(MyPlayLayer, PlayLayer) {
         m_fields->m_statusLabel->setVisible(Mod::get()->getSettingValue<bool>("show-indicator"));
         m_fields->m_statusLabel->setString(g_isRecordingEnabled ? "BestGhost: RECORDING" : "BestGhost: OFF");
         m_fields->m_statusLabel->setColor(g_isRecordingEnabled ? ccColor3B{0, 255, 255} : ccColor3B{200, 200, 200});
-        
-        if (m_fields->m_ghostVisual) {
-            double opSetting = Mod::get()->getSettingValue<double>("ghost-opacity");
-            m_fields->m_ghostVisual->setOpacity(static_cast<uint8_t>(opSetting * 2.55));
-        }
     }
 
     void resetLevel() {
@@ -125,7 +119,7 @@ class $modify(MyPlayLayer, PlayLayer) {
 };
 
 /**
- * Custom Settings Menu (Simplified: No Opacity Box)
+ * Custom Settings Menu
  */
 class GhostSettingsLayer : public FLAlertLayer, public TextInputDelegate {
 protected:

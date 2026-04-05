@@ -33,9 +33,8 @@ class $modify(MyPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
 
-        // Turn OFF recording by default on entry
+        // Reset state for new level entry
         g_isRecordingEnabled = false;
-        
         m_fields->m_playbackIndex = 0;
         g_currentAttemptData.clear();
 
@@ -94,14 +93,30 @@ class $modify(MyPlayLayer, PlayLayer) {
 };
 
 /**
- * 2. PauseLayer Hooks - Adjusted Placement
+ * 2. PauseLayer Hooks - Bruteforce Button Placement
  */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
 
+        // 1. Try common menu IDs
         auto menu = this->getChildByID("settings-button-menu");
+        if (!menu) menu = this->getChildByID("right-button-menu");
         
+        // 2. Bruteforce: If no ID found, look for any menu on the right side of the screen
+        if (!menu) {
+            CCArrayExt<CCNode*> children = this->getChildren();
+            for (auto* child : children) {
+                if (auto* m = typeinfo_cast<CCMenu*>(child)) {
+                    // Right-side menus usually have a high X position
+                    if (m->getPositionX() > CCDirector::get()->getWinSize().width / 2) {
+                        menu = m;
+                        break;
+                    }
+                }
+            }
+        }
+
         if (menu) {
             auto toggler = CCMenuItemToggler::createWithStandardSprites(
                 this, menu_selector(MyPauseLayer::onToggleGhost), 0.65f
@@ -111,8 +126,8 @@ class $modify(MyPauseLayer, PauseLayer) {
             
             menu->addChild(toggler);
             
-            // Placed to the LEFT (-40) and slightly DOWN (-20)
-            toggler->setPosition({-40.0f, -20.0f}); 
+            // Overlap-safe position: 40 units left of the menu origin
+            toggler->setPosition({-40.0f, 0.0f}); 
             menu->updateLayout();
         }
     }
@@ -129,7 +144,7 @@ class $modify(MyPauseLayer, PauseLayer) {
 };
 
 /**
- * 3. Physics Update Loop
+ * 3. Update Loop
  */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {

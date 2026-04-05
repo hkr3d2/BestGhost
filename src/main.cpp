@@ -297,8 +297,8 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                 g->m_isSpider = (frame.mode == Spider);
                 g->m_isSwing = (frame.mode == Swing);
                 
-                // Refresh the sprite frames for the current mode
-                g->updatePlayerFrame();
+                // GD 2.2 compliant way to update icons
+                g->updatePlayerIconStack();
                 g->update(dt);
             } else {
                 myPL->m_fields->m_ghostVisual->setVisible(false);

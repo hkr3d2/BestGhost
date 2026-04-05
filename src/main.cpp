@@ -57,10 +57,16 @@ void loadGhostFile(int levelID) {
 }
 
 /**
- * PlayerObject Hooks for Invincibility
+ * PlayerObject Hooks for Absolute Invincibility
  */
 class $modify(PlayerObject) {
-    // playerDestroyed is the correct name for death logic in Geode 2.2
+    // Stop the death animation/logic entirely
+    void destroyPlayer(bool p0, GameObject* p1) {
+        if (Mod::get()->getSettingValue<bool>("spectate-mode")) return;
+        PlayerObject::destroyPlayer(p0, p1);
+    }
+
+    // Secondary death trigger
     void playerDestroyed(bool p0) {
         if (Mod::get()->getSettingValue<bool>("spectate-mode")) return;
         PlayerObject::playerDestroyed(p0);
@@ -114,7 +120,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         m_fields->m_statusLabel->setVisible(Mod::get()->getSettingValue<bool>("show-indicator"));
         
         if (isSpectate) {
-            m_fields->m_statusLabel->setString("MODE: SPECTATING (GODMODE)");
+            m_fields->m_statusLabel->setString("MODE: SPECTATING");
             m_fields->m_statusLabel->setColor({ 255, 200, 0 });
         } else if (isReplay) {
             m_fields->m_statusLabel->setString("MODE: REPLAY (NO SAVE)");
@@ -173,7 +179,7 @@ class $modify(MyPauseLayer, PauseLayer) {
 };
 
 /**
- * Update Loop
+ * Update Loop & Input Management
  */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
@@ -219,7 +225,11 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                 myPL->m_fields->m_ghostVisual->setPosition({ ghostPos.x, ghostPos.y });
 
                 if (isSpectate) {
+                    // Force the player to follow the ghost perfectly
                     player->setPosition({ ghostPos.x, ghostPos.y });
+                    // Zero out velocity to prevent collision engine from thinking we are 'ramming' into things
+                    player->m_yVelocity = 0;
+                    player->m_xVelocity = 0;
                 }
             } else {
                 myPL->m_fields->m_ghostVisual->setVisible(false);

@@ -11,9 +11,8 @@ using namespace geode::prelude;
 namespace fs = std::filesystem;
 
 struct GhostFrame {
-    float x1, y1;
-    float x2, y2;
-    bool isDual;
+    float x;
+    float y;
 };
 
 // Global Session State
@@ -62,8 +61,7 @@ void loadGhostFile(int levelID) {
  */
 class $modify(MyPlayLayer, PlayLayer) {
     struct Fields {
-        PlayerObject* m_ghostPlayer1 = nullptr;
-        PlayerObject* m_ghostPlayer2 = nullptr;
+        PlayerObject* m_ghostVisual = nullptr;
         CCLabelBMFont* m_statusLabel = nullptr;
         double m_timeCounter = 0.0;
     };
@@ -83,22 +81,15 @@ class $modify(MyPlayLayer, PlayLayer) {
         this->addChild(label, 100);
         m_fields->m_statusLabel = label;
 
-        // Initialize Ghost Players
+        // Initialize Ghost as PlayerObject (Syncs with your icons)
         auto gm = GameManager::sharedState();
-        
-        // Creating PlayerObjects that mimic the user
-        m_fields->m_ghostPlayer1 = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
-        m_fields->m_ghostPlayer2 = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
-
-        float opacity = static_cast<float>(Mod::get()->getSettingValue<double>("ghost-opacity"));
-        
-        for (auto player : {m_fields->m_ghostPlayer1, m_fields->m_ghostPlayer2}) {
-            if (player) {
-                player->setOpacity(static_cast<uint8_t>(opacity * 2.55f));
-                player->setVisible(false);
-                // Use m_objectLayer for correct depth and scrolling
-                if (this->m_objectLayer) this->m_objectLayer->addChild(player, 1000);
-            }
+        auto ghost = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
+        if (ghost) {
+            float op = static_cast<float>(Mod::get()->getSettingValue<double>("ghost-opacity"));
+            ghost->setOpacity(static_cast<uint8_t>(op * 2.55f));
+            ghost->setVisible(false);
+            m_fields->m_ghostVisual = ghost;
+            if (this->m_objectLayer) this->m_objectLayer->addChild(ghost, 1000);
         }
 
         updateUI();
@@ -111,15 +102,16 @@ class $modify(MyPlayLayer, PlayLayer) {
         m_fields->m_statusLabel->setString(g_isRecordingEnabled ? "BestGhost: RECORDING" : "BestGhost: OFF");
         m_fields->m_statusLabel->setColor(g_isRecordingEnabled ? ccColor3B{0, 255, 255} : ccColor3B{200, 200, 200});
         
-        float op = static_cast<float>(Mod::get()->getSettingValue<double>("ghost-opacity")) * 2.55f;
-        if (m_fields->m_ghostPlayer1) m_fields->m_ghostPlayer1->setOpacity(static_cast<uint8_t>(op));
-        if (m_fields->m_ghostPlayer2) m_fields->m_ghostPlayer2->setOpacity(static_cast<uint8_t>(op));
+        if (m_fields->m_ghostVisual) {
+            float op = static_cast<float>(Mod::get()->getSettingValue<double>("ghost-opacity")) * 2.55f;
+            m_fields->m_ghostVisual->setOpacity(static_cast<uint8_t>(op));
+        }
     }
 
     void resetLevel() {
         PlayLayer::resetLevel();
         if (g_isRecordingEnabled && !g_currentAttemptData.empty()) {
-            float currentMaxX = g_currentAttemptData.back().x1;
+            float currentMaxX = g_currentAttemptData.back().x;
             if (currentMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
                 g_bestAttemptData = g_currentAttemptData;
@@ -128,8 +120,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         }
         g_currentAttemptData.clear();
         m_fields->m_timeCounter = 0.0;
-        if (m_fields->m_ghostPlayer1) m_fields->m_ghostPlayer1->setVisible(false);
-        if (m_fields->m_ghostPlayer2) m_fields->m_ghostPlayer2->setVisible(false);
+        if (m_fields->m_ghostVisual) m_fields->m_ghostVisual->setVisible(false);
         updateUI();
     }
 };
@@ -158,7 +149,7 @@ public:
 
         auto winSize = CCDirector::get()->getWinSize();
         auto bg = CCScale9Sprite::create("GJ_square01.png");
-        bg->setContentSize({ 260, 220 });
+        bg->setContentSize({ 250, 210 });
         bg->setPosition(winSize / 2);
         m_mainLayer->addChild(bg);
 
@@ -166,28 +157,33 @@ public:
         menu->setTouchPriority(-501); 
         m_mainLayer->addChild(menu);
 
-        createLabel("Record Ghost", {winSize.width / 2 - 55, winSize.height / 2 + 60});
+        // Record Toggle
+        createLabel("Record Ghost", {winSize.width / 2 - 50, winSize.height / 2 + 55});
         auto recToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
-        recToggle->setPosition({ 65, 60 });
+        recToggle->setPosition({ 60, 55 });
         recToggle->toggle(g_isRecordingEnabled);
         menu->addChild(recToggle);
 
-        createLabel("Show Status", {winSize.width / 2 - 55, winSize.height / 2 + 25});
+        // Status Toggle
+        createLabel("Show Status", {winSize.width / 2 - 50, winSize.height / 2 + 20});
         auto statToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleStatus), 0.7f);
-        statToggle->setPosition({ 65, 25 });
+        statToggle->setPosition({ 60, 20 });
         statToggle->toggle(Mod::get()->getSettingValue<bool>("show-indicator"));
         menu->addChild(statToggle);
 
-        createLabel("X Offset", {winSize.width / 2 - 55, winSize.height / 2 - 10});
-        auto offInp = createInput("ghost-offset", {winSize.width / 2 + 65, winSize.height / 2 - 10}, 1);
+        // X Offset
+        createLabel("X Offset", {winSize.width / 2 - 50, winSize.height / 2 - 15});
+        auto offInp = createInput("ghost-offset", {winSize.width / 2 + 60, winSize.height / 2 - 15}, 1);
         m_mainLayer->addChild(offInp);
 
-        createLabel("Opacity (0-100)", {winSize.width / 2 - 55, winSize.height / 2 - 45});
-        auto opInp = createInput("ghost-opacity", {winSize.width / 2 + 65, winSize.height / 2 - 45}, 2);
+        // Opacity
+        createLabel("Opacity (0-100)", {winSize.width / 2 - 50, winSize.height / 2 - 50});
+        auto opInp = createInput("ghost-opacity", {winSize.width / 2 + 60, winSize.height / 2 - 50}, 2);
         m_mainLayer->addChild(opInp);
 
+        // Close
         auto closeBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"), this, menu_selector(GhostSettingsLayer::onClose));
-        closeBtn->setPosition({ -115, 95 });
+        closeBtn->setPosition({ -110, 90 });
         menu->addChild(closeBtn);
 
         return true;
@@ -264,39 +260,24 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto playLayer = typeinfo_cast<PlayLayer*>(this);
         if (!playLayer || playLayer->m_isPaused) return;
 
-        auto p1 = playLayer->m_player1;
-        auto p2 = playLayer->m_player2;
+        auto player = playLayer->m_player1;
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
 
         if (g_isRecordingEnabled) {
-            g_currentAttemptData.push_back({ 
-                p1->getPositionX(), p1->getPositionY(),
-                p2 ? p2->getPositionX() : 0.0f, p2 ? p2->getPositionY() : 0.0f,
-                playLayer->m_isDualMode 
-            });
+            g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
         }
         
         myPL->m_fields->m_timeCounter += 1.0;
 
-        if (!g_bestAttemptData.empty()) {
+        if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
             double offset = Mod::get()->getSettingValue<double>("ghost-offset");
             int targetIdx = static_cast<int>(myPL->m_fields->m_timeCounter + (offset * 4.0));
 
             if (targetIdx >= 0 && targetIdx < static_cast<int>(g_bestAttemptData.size())) {
-                auto& frame = g_bestAttemptData[targetIdx];
-                
-                if (myPL->m_fields->m_ghostPlayer1) {
-                    myPL->m_fields->m_ghostPlayer1->setVisible(true);
-                    myPL->m_fields->m_ghostPlayer1->setPosition({ frame.x1, frame.y1 });
-                }
-                
-                if (myPL->m_fields->m_ghostPlayer2) {
-                    myPL->m_fields->m_ghostPlayer2->setVisible(frame.isDual);
-                    myPL->m_fields->m_ghostPlayer2->setPosition({ frame.x2, frame.y2 });
-                }
+                myPL->m_fields->m_ghostVisual->setVisible(true);
+                myPL->m_fields->m_ghostVisual->setPosition({ g_bestAttemptData[targetIdx].x, g_bestAttemptData[targetIdx].y });
             } else {
-                if (myPL->m_fields->m_ghostPlayer1) myPL->m_fields->m_ghostPlayer1->setVisible(false);
-                if (myPL->m_fields->m_ghostPlayer2) myPL->m_fields->m_ghostPlayer2->setVisible(false);
+                myPL->m_fields->m_ghostVisual->setVisible(false);
             }
         }
     }

@@ -5,16 +5,6 @@
         "mac": "2.2081",
         "android": "2.2081",
         "ios": "2.2081"
-    "geode": "v5.5.3",
-    "id": "hkr3d2.best-ghost",
-    "name": "Best Ghost GD Edition",
-    "version": "1.0.0",
-    "developer": "Hkr3d2",
-    "description": "Race against your personal best ghosts. Saves every new best percentage.",
-    "tags": ["gameplay", "practice", "utility"],
-    "dependencies": {},
-    "resources": {
-        "files": []
     },
     "id": "hkr3d2.bestghost",
     "name": "Best Ghost",

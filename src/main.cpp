@@ -28,6 +28,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         CCSprite* m_ghostVisual = nullptr;
         CCLabelBMFont* m_statusLabel = nullptr;
         size_t m_playbackIndex = 0;
+        int m_sessionAttempt = 0; // Tracks attempts in this specific session
     };
 
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
@@ -37,8 +38,9 @@ class $modify(MyPlayLayer, PlayLayer) {
         g_bestAttemptData.clear();
         g_bestXAttained = 0.0f;
         m_fields->m_playbackIndex = 0;
+        m_fields->m_sessionAttempt = 1; // Start at attempt 1
 
-        // 1. LOAD GHOST
+        // 1. LOAD GHOST FROM DISK
         auto path = getGhostPath(level);
         if (std::filesystem::exists(path)) {
             std::ifstream file(path, std::ios::binary);
@@ -50,7 +52,6 @@ class $modify(MyPlayLayer, PlayLayer) {
         }
 
         // 2. CREATE STATUS LABEL
-        // Using bigFont.fnt for that classic GD look
         auto label = CCLabelBMFont::create("", "bigFont.fnt");
         label->setScale(0.4f);
         label->setOpacity(150);
@@ -69,26 +70,33 @@ class $modify(MyPlayLayer, PlayLayer) {
             if (this->m_objectLayer) this->m_objectLayer->addChild(ghost, 1000);
         }
 
-        updateStatusLabel();
+        updateStatusUI();
         return true;
     }
 
-    void updateStatusLabel() {
+    void updateStatusUI() {
         if (!m_fields->m_statusLabel) return;
         
-        if (g_bestAttemptData.empty()) {
-            m_fields->m_statusLabel->setString("Ghost: Recording...");
-            m_fields->m_statusLabel->setColor({ 255, 100, 100 }); // Reddish for recording
+        // If it's the first attempt of the session, we are just warming up/recording
+        if (m_fields->m_sessionAttempt == 1) {
+            m_fields->m_statusLabel->setString("Attempt 1: Calibrating...");
+            m_fields->m_statusLabel->setColor({ 255, 255, 100 }); // Yellow for calibration
         } else {
-            m_fields->m_statusLabel->setString("Ghost: Replaying Best");
-            m_fields->m_statusLabel->setColor({ 100, 255, 255 }); // Cyan for replaying
+            if (g_bestAttemptData.empty()) {
+                m_fields->m_statusLabel->setString("Ghost: Recording...");
+                m_fields->m_statusLabel->setColor({ 255, 100, 100 });
+            } else {
+                m_fields->m_statusLabel->setString("Ghost: Replaying Best");
+                m_fields->m_statusLabel->setColor({ 100, 255, 255 });
+            }
         }
     }
 
     void resetLevel() {
         PlayLayer::resetLevel();
         
-        if (!g_currentAttemptData.empty()) {
+        // Only save data IF it wasn't the first "calibration" attempt
+        if (m_fields->m_sessionAttempt > 1 && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
             if (currentMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
@@ -102,20 +110,26 @@ class $modify(MyPlayLayer, PlayLayer) {
             }
         }
 
+        // Increment session attempt
+        m_fields->m_sessionAttempt++;
+        
         g_currentAttemptData.clear(); 
         m_fields->m_playbackIndex = 0;
         if (m_fields->m_ghostVisual) m_fields->m_ghostVisual->setVisible(false);
         
-        updateStatusLabel();
+        updateStatusUI();
     }
 
     void levelComplete() {
         PlayLayer::levelComplete();
-        g_bestAttemptData = g_currentAttemptData;
-        auto path = getGhostPath(this->m_level);
-        std::ofstream file(path, std::ios::binary);
-        for (auto& frame : g_bestAttemptData) {
-            file.write(reinterpret_cast<const char*>(&frame), sizeof(GhostFrame));
+        // Only save victory if it wasn't the skipped first attempt
+        if (m_fields->m_sessionAttempt > 1) {
+            g_bestAttemptData = g_currentAttemptData;
+            auto path = getGhostPath(this->m_level);
+            std::ofstream file(path, std::ios::binary);
+            for (auto& frame : g_bestAttemptData) {
+                file.write(reinterpret_cast<const char*>(&frame), sizeof(GhostFrame));
+            }
         }
     }
 };
@@ -129,10 +143,15 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto player = playLayer->m_player1;
         if (!player) return;
 
-        g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
-
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
-        if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
+
+        // RECORDING: Skip storing data if it's attempt 1
+        if (myPL->m_fields->m_sessionAttempt > 1) {
+            g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
+        }
+
+        // PLAYBACK: Skip showing ghost if it's attempt 1
+        if (myPL->m_fields->m_sessionAttempt > 1 && myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
             size_t index = myPL->m_fields->m_playbackIndex;
             if (index < g_bestAttemptData.size()) {
                 myPL->m_fields->m_ghostVisual->setVisible(true);

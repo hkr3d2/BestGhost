@@ -13,8 +13,8 @@
     "description": "Race against your personal best ghosts in Geometry Dash",
     "tags": ["gameplay", "practice"],
     "dependencies": {},
-    "settings": {
-        "ghost-offset": {
+   "settings": {
+    "ghost-offset": {
         "name": "Ghost X-Offset",
         "description": "How far behind the ghost is (negative is behind).",
         "type": "float",
@@ -43,9 +43,9 @@
     },
     "open-library": {
         "name": "Open Ghost Library",
-        "description": "Open the folder where .ghst files are stored to share them.",
-        "type": "custom",
-        "control": "button"
+        "description": "Click to open the folder where .ghst files are stored.",
+        "type": "bool",
+        "default": false
         }
     }
 }

@@ -13,7 +13,7 @@ struct GhostFrame {
 
 // Global Settings
 bool g_isRecordingEnabled = false;
-float g_ghostYOffset = 30.0f; // 1 Block up
+float g_ghostXOffset = 30.0f; // +30 units = 1 Block AFTER the player
 
 // Global Data
 std::vector<GhostFrame> g_bestAttemptData;
@@ -58,6 +58,15 @@ class $modify(MyPlayLayer, PlayLayer) {
         return true;
     }
 
+    // --- NEW: DISABLE GHOST ON EXIT ---
+    void onExit() {
+        PlayLayer::onExit();
+        g_isRecordingEnabled = false;
+        g_bestAttemptData.clear();
+        g_currentAttemptData.clear();
+        log::info("Ghost: Session cleared on level exit.");
+    }
+
     void updateUI() {
         if (!m_fields->m_statusLabel) return;
         m_fields->m_statusLabel->setString(g_isRecordingEnabled ? (g_bestAttemptData.empty() ? "Ghost: RECORDING..." : "Ghost: ACTIVE") : "Ghost: OFF");
@@ -77,25 +86,20 @@ class $modify(MyPlayLayer, PlayLayer) {
 };
 
 /**
- * 2. PauseLayer Hooks
+ * 2. PauseLayer Hooks - Placed near Settings
  */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
 
-        // Standard Geode menu IDs
-        auto menu = this->getChildByID("right-button-menu");
-        if (!menu) menu = this->getChildByID("bottom-button-menu");
-        
-        // Final fallback if IDs fail: search for the first CCMenu
-        if (!menu) {
-            menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
-        }
+        // Target the settings menu (bottom right usually)
+        auto menu = this->getChildByID("settings-button-menu");
+        if (!menu) menu = this->getChildByID("right-button-menu");
+        if (!menu) menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
 
         if (menu) {
-            // Standard Toggler
             auto toggler = CCMenuItemToggler::createWithStandardSprites(
-                this, menu_selector(MyPauseLayer::onToggleGhost), 0.7f
+                this, menu_selector(MyPauseLayer::onToggleGhost), 0.65f
             );
             toggler->setID("ghost-toggle"_spr);
             toggler->toggle(g_isRecordingEnabled);
@@ -106,7 +110,6 @@ class $modify(MyPauseLayer, PauseLayer) {
     }
 
     void onToggleGhost(CCObject* sender) {
-        // Correcting toggle logic: get the state from the toggler
         auto toggler = static_cast<CCMenuItemToggler*>(sender);
         g_isRecordingEnabled = !toggler->isOn(); 
         
@@ -115,7 +118,6 @@ class $modify(MyPauseLayer, PauseLayer) {
             g_currentAttemptData.clear();
         }
 
-        // Return to game and restart
         this->onResume(nullptr);
         if (auto pl = PlayLayer::get()) {
             pl->resetLevel();
@@ -124,7 +126,7 @@ class $modify(MyPauseLayer, PauseLayer) {
 };
 
 /**
- * 3. Update Loop
+ * 3. Update Loop - X Offset applied
  */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
@@ -144,9 +146,11 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
             size_t index = myPL->m_fields->m_playbackIndex;
             if (index < g_bestAttemptData.size()) {
                 myPL->m_fields->m_ghostVisual->setVisible(true);
+                
+                // Position + X Offset (Trail behind)
                 myPL->m_fields->m_ghostVisual->setPosition({ 
-                    g_bestAttemptData[index].x, 
-                    g_bestAttemptData[index].y + g_ghostYOffset 
+                    g_bestAttemptData[index].x + g_ghostXOffset, 
+                    g_bestAttemptData[index].y 
                 });
                 myPL->m_fields->m_playbackIndex++;
             } else {

@@ -2,6 +2,7 @@
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PauseLayer.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
+#include <Geode/modify/PlayerObject.hpp>
 #include <vector>
 #include <fstream>
 #include <filesystem>
@@ -56,6 +57,16 @@ void loadGhostFile(int levelID) {
 }
 
 /**
+ * PlayerObject Hooks for Invincibility
+ */
+class $modify(PlayerObject) {
+    void playerWillDie(bool p0) {
+        if (Mod::get()->getSettingValue<bool>("spectate-mode")) return;
+        PlayerObject::playerWillDie(p0);
+    }
+};
+
+/**
  * PlayLayer Hooks
  */
 class $modify(MyPlayLayer, PlayLayer) {
@@ -102,7 +113,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         m_fields->m_statusLabel->setVisible(Mod::get()->getSettingValue<bool>("show-indicator"));
         
         if (isSpectate) {
-            m_fields->m_statusLabel->setString("MODE: SPECTATING");
+            m_fields->m_statusLabel->setString("MODE: SPECTATING (GODMODE)");
             m_fields->m_statusLabel->setColor({ 255, 200, 0 });
         } else if (isReplay) {
             m_fields->m_statusLabel->setString("MODE: REPLAY (NO SAVE)");
@@ -115,11 +126,9 @@ class $modify(MyPlayLayer, PlayLayer) {
 
     void resetLevel() {
         PlayLayer::resetLevel();
-
         bool isReplay = Mod::get()->getSettingValue<bool>("replay-mode");
         bool isSpectate = Mod::get()->getSettingValue<bool>("spectate-mode");
 
-        // Only save if NOT in Replay or Spectate mode
         if (g_isRecordingEnabled && !isReplay && !isSpectate && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
             if (currentMaxX > g_bestXAttained) {
@@ -180,21 +189,18 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         bool isReplay = Mod::get()->getSettingValue<bool>("replay-mode");
         bool isSpectate = Mod::get()->getSettingValue<bool>("spectate-mode");
 
-        // 1. Logic for Recording (Blocked if Replay or Spectate is active)
         if (g_isRecordingEnabled && !isReplay && !isSpectate) {
             g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
         }
         
         myPL->m_fields->m_timeCounter += 1.0;
 
-        // 2. Playback Logic
         if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
-            
             double offsetBlocks = Mod::get()->getSettingValue<double>("ghost-offset");
             bool fixFPS = Mod::get()->getSettingValue<bool>("fix-fps-offset");
 
             int frameShift = 0;
-            if (!isSpectate) { // Only apply offset if we are actually racing it
+            if (!isSpectate) { 
                 if (fixFPS) {
                     float currentFPS = (dt > 0) ? (1.0f / dt) : 60.0f;
                     float fpsRatio = currentFPS / 60.0f;
@@ -208,35 +214,25 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
 
             if (targetIdx >= 0 && targetIdx < static_cast<int>(g_bestAttemptData.size())) {
                 myPL->m_fields->m_ghostVisual->setVisible(true);
-                
                 auto ghostPos = g_bestAttemptData[targetIdx];
                 myPL->m_fields->m_ghostVisual->setPosition({ ghostPos.x, ghostPos.y });
 
-                // SPECTATE MODE: The player is simply forced to the ghost's position
                 if (isSpectate) {
                     player->setPosition({ ghostPos.x, ghostPos.y });
                 }
             } else {
                 myPL->m_fields->m_ghostVisual->setVisible(false);
-                // If ghost ends in spectate mode, you probably want to die or stop
-                if (isSpectate && targetIdx >= static_cast<int>(g_bestAttemptData.size())) {
-                    // Ghost finished!
-                }
             }
         }
     }
-};
 
-/**
- * Library Listener
- */
-$execute {
-    listenForSettingChanges<bool>("open-library", [](bool value) {
-        if (value) {
-            auto path = Mod::get()->getSaveDir() / "ghosts";
-            if (!fs::exists(path)) fs::create_directories(path);
-            utils::file::openFolder(path);
-            Mod::get()->setSettingValue("open-library", false);
-        }
-    });
-}
+    void pushButton(int p0, bool p1) {
+        if (Mod::get()->getSettingValue<bool>("spectate-mode")) return;
+        GJBaseGameLayer::pushButton(p0, p1);
+    }
+
+    void releaseButton(int p0, bool p1) {
+        if (Mod::get()->getSettingValue<bool>("spectate-mode")) return;
+        GJBaseGameLayer::releaseButton(p0, p1);
+    }
+};

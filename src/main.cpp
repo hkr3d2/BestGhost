@@ -56,7 +56,7 @@ void loadGhostFile(int levelID) {
 }
 
 /**
- * PlayLayer Hooks - Moved up so GhostSettingsLayer can see it
+ * PlayLayer Hooks
  */
 class $modify(MyPlayLayer, PlayLayer) {
     struct Fields {
@@ -137,7 +137,6 @@ class GhostSettingsLayer : public FLAlertLayer {
 public:
     static GhostSettingsLayer* create() {
         auto ret = new GhostSettingsLayer();
-        // Using standard init for FLAlertLayer
         if (ret && ret->init(150)) {
             ret->autorelease();
             return ret;
@@ -150,6 +149,8 @@ public:
         if (!FLAlertLayer::init(opacity)) return false;
 
         auto winSize = CCDirector::get()->getWinSize();
+        
+        // We put buttons on m_buttonMenu which FLAlertLayer handles better for touch
         m_mainLayer = CCLayer::create();
         this->addChild(m_mainLayer);
 
@@ -158,61 +159,59 @@ public:
         bg->setPosition(winSize / 2);
         m_mainLayer->addChild(bg);
 
-        auto menu = CCMenu::create();
-        m_mainLayer->addChild(menu);
-
+        // title
         auto title = CCLabelBMFont::create("Ghost Settings", "goldFont.fnt");
         title->setPosition({ winSize.width / 2, winSize.height / 2 + 70 });
         title->setScale(0.7f);
         m_mainLayer->addChild(title);
 
-        // Record Toggle
+        // Labels (Not clickable)
         auto recordLabel = CCLabelBMFont::create("Record Run", "bigFont.fnt");
         recordLabel->setScale(0.4f);
         recordLabel->setPosition({ winSize.width / 2 - 40, winSize.height / 2 + 25 });
         m_mainLayer->addChild(recordLabel);
 
-        auto recordToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.6f);
-        recordToggle->setPosition({ 50, 25 });
-        recordToggle->toggle(g_isRecordingEnabled);
-        menu->addChild(recordToggle);
-
-        // Replay Toggle
         auto replayLabel = CCLabelBMFont::create("Replay Only", "bigFont.fnt");
         replayLabel->setScale(0.4f);
         replayLabel->setPosition({ winSize.width / 2 - 40, winSize.height / 2 - 15 });
         m_mainLayer->addChild(replayLabel);
 
+        // Button Menu (Uses the built-in m_buttonMenu for proper priority)
+        m_buttonMenu->setTouchPriority(-500); // High priority to ensure clicks work
+
+        // Record Toggle
+        auto recordToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.6f);
+        recordToggle->setPosition({ 50, 25 });
+        recordToggle->toggle(g_isRecordingEnabled);
+        m_buttonMenu->addChild(recordToggle);
+
+        // Replay Toggle
         auto replayToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleReplay), 0.6f);
         replayToggle->setPosition({ 50, -15 });
         replayToggle->toggle(Mod::get()->getSettingValue<bool>("replay-mode"));
-        menu->addChild(replayToggle);
+        m_buttonMenu->addChild(replayToggle);
 
-        // Folder
+        // Folder Button (Using standard GD sprite names to avoid "no texture")
         auto folderBtn = CCMenuItemSpriteExtra::create(
             CCSprite::createWithSpriteFrameName("GJ_plainBtn_001.png"),
             this,
             menu_selector(GhostSettingsLayer::onOpenFolder)
         );
-        auto folderIcon = CCSprite::createWithSpriteFrameName("folderIcon_001.png"_spr);
-        if (!folderIcon) folderIcon = CCSprite::createWithSpriteFrameName("GJ_filesBtn_001.png"); // Fallback
-        folderIcon->setScale(0.8f);
+        auto folderIcon = CCSprite::createWithSpriteFrameName("GJ_filesBtn_001.png");
+        folderIcon->setScale(0.7f);
         folderIcon->setPosition(folderBtn->getContentSize() / 2);
         folderBtn->addChild(folderIcon);
         folderBtn->setPosition({ 0, -60 });
-        menu->addChild(folderBtn);
+        m_buttonMenu->addChild(folderBtn);
 
-        // Close
+        // Close Button
         auto closeBtn = CCMenuItemSpriteExtra::create(
             CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"),
             this,
             menu_selector(GhostSettingsLayer::onClose)
         );
         closeBtn->setPosition({ -100, 80 });
-        menu->addChild(closeBtn);
-
-        this->setTouchEnabled(true);
-        this->setKeypadEnabled(true);
+        m_buttonMenu->addChild(closeBtn);
 
         return true;
     }
@@ -239,7 +238,9 @@ public:
     }
 
     void onClose(CCObject*) {
-        this->removeFromParent();
+        this->setKeypadEnabled(false);
+        this->setTouchEnabled(false);
+        this->removeFromParentAndCleanup(true);
     }
 
     void keyBackClicked() override {
@@ -276,6 +277,7 @@ class $modify(MyPauseLayer, PauseLayer) {
 
     void onOpenCustomGhostMenu(CCObject* sender) {
         auto layer = GhostSettingsLayer::create();
+        // Adding to the scene to prevent PauseLayer from eating the touches
         CCDirector::get()->getRunningScene()->addChild(layer, 100);
     }
 };

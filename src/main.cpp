@@ -33,8 +33,9 @@ class $modify(MyPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
 
-        // Reset session-specific flags but KEEP g_bestAttemptData
+        // Turn OFF by default on level start (as requested)
         g_isRecordingEnabled = false;
+        
         m_fields->m_playbackIndex = 0;
         g_currentAttemptData.clear();
 
@@ -63,18 +64,12 @@ class $modify(MyPlayLayer, PlayLayer) {
 
     void updateUI() {
         if (!m_fields->m_statusLabel) return;
-        
         if (!g_isRecordingEnabled) {
             m_fields->m_statusLabel->setString("BestGhost: OFF");
             m_fields->m_statusLabel->setColor({ 200, 200, 200 });
         } else {
-            if (g_bestAttemptData.empty()) {
-                m_fields->m_statusLabel->setString("BestGhost: Recording New Best...");
-                m_fields->m_statusLabel->setColor({ 255, 100, 100 }); // Red for first record
-            } else {
-                m_fields->m_statusLabel->setString("BestGhost: Chasing Best");
-                m_fields->m_statusLabel->setColor({ 0, 255, 255 }); // Cyan for active chase
-            }
+            m_fields->m_statusLabel->setString(g_bestAttemptData.empty() ? "BestGhost: RECORDING..." : "BestGhost: ACTIVE");
+            m_fields->m_statusLabel->setColor({ 0, 255, 255 });
         }
     }
 
@@ -84,12 +79,10 @@ class $modify(MyPlayLayer, PlayLayer) {
         if (g_isRecordingEnabled && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
 
-            // --- THE "BEST" LOGIC ---
-            // Only update the ghost if we went further than the previous record
+            // Update only if this was the BEST run so far
             if (currentMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
                 g_bestAttemptData = g_currentAttemptData;
-                log::info("BestGhost: New Record! {} units", g_bestXAttained);
             }
         }
 
@@ -101,13 +94,12 @@ class $modify(MyPlayLayer, PlayLayer) {
 };
 
 /**
- * 2. PauseLayer Hooks
+ * 2. PauseLayer Hooks - Positioned UNDER settings
  */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
 
-        // Try to find the settings gear menu
         auto menu = this->getChildByID("settings-button-menu");
         
         if (menu) {
@@ -119,8 +111,8 @@ class $modify(MyPauseLayer, PauseLayer) {
             
             menu->addChild(toggler);
             
-            // Placed to the left of the gear icon
-            toggler->setPosition({-40.0f, 0.0f}); 
+            // Move it UNDER the settings gear (Negative Y)
+            toggler->setPosition({0.0f, -40.0f}); 
             menu->updateLayout();
         }
     }
@@ -137,7 +129,7 @@ class $modify(MyPauseLayer, PauseLayer) {
 };
 
 /**
- * 3. Update Loop
+ * 3. Physics Update Loop
  */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
@@ -150,29 +142,24 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto player = playLayer->m_player1;
         if (!player) return;
 
-        // Always record the current attempt
+        // Record current frame
         g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
 
-        // Only playback if we have a "Best" saved
+        // Playback best ghost
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
         if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
             size_t index = myPL->m_fields->m_playbackIndex;
             
             if (index < g_bestAttemptData.size()) {
                 myPL->m_fields->m_ghostVisual->setVisible(true);
-                // 1 block trail behind
+                // 1 block behind on X
                 myPL->m_fields->m_ghostVisual->setPosition({ 
                     g_bestAttemptData[index].x + g_ghostXOffset, 
                     g_bestAttemptData[index].y 
                 });
                 myPL->m_fields->m_playbackIndex++;
             } else {
-                // If the player survives longer than the ghost, hide the ghost
                 myPL->m_fields->m_ghostVisual->setVisible(false);
-                if (myPL->m_fields->m_statusLabel) {
-                    myPL->m_fields->m_statusLabel->setString("BestGhost: NEW RECORD!");
-                    myPL->m_fields->m_statusLabel->setColor({ 100, 255, 100 }); // Green for improvement
-                }
             }
         }
     }

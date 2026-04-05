@@ -38,12 +38,6 @@
         "type": "bool",
         "default": false
     },
-    "spectate-mode": {
-        "name": "Spectate Mode",
-        "description": "Automatically follows the ghost. Theater mode!",
-        "type": "bool",
-        "default": false
-    },
     "open-library": {
         "name": "Open Ghost Library",
         "description": "Click to open the folder where .ghst files are stored.",

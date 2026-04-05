@@ -32,7 +32,7 @@
         "type": "bool",
         "default": true
     },
-    "replay-only": {
+    "replay-mode": {
         "name": "Replay Only Mode",
         "description": "The ghost will play, but your current run will NOT be recorded.",
         "type": "bool",

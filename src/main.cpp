@@ -73,7 +73,6 @@ class $modify(MyPlayLayer, PlayLayer) {
         m_fields->m_timeCounter = 0.0;
         g_currentAttemptData.clear();
 
-        // Status Label
         auto label = CCLabelBMFont::create("", "bigFont.fnt");
         label->setScale(0.35f);
         label->setOpacity(120);
@@ -81,12 +80,11 @@ class $modify(MyPlayLayer, PlayLayer) {
         this->addChild(label, 100);
         m_fields->m_statusLabel = label;
 
-        // Initialize Ghost as PlayerObject (Syncs with your icons)
         auto gm = GameManager::sharedState();
         auto ghost = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
         if (ghost) {
-            float op = static_cast<float>(Mod::get()->getSettingValue<double>("ghost-opacity"));
-            ghost->setOpacity(static_cast<uint8_t>(op * 2.55f));
+            double opSetting = Mod::get()->getSettingValue<double>("ghost-opacity");
+            ghost->setOpacity(static_cast<uint8_t>(opSetting * 2.55));
             ghost->setVisible(false);
             m_fields->m_ghostVisual = ghost;
             if (this->m_objectLayer) this->m_objectLayer->addChild(ghost, 1000);
@@ -103,8 +101,8 @@ class $modify(MyPlayLayer, PlayLayer) {
         m_fields->m_statusLabel->setColor(g_isRecordingEnabled ? ccColor3B{0, 255, 255} : ccColor3B{200, 200, 200});
         
         if (m_fields->m_ghostVisual) {
-            float op = static_cast<float>(Mod::get()->getSettingValue<double>("ghost-opacity")) * 2.55f;
-            m_fields->m_ghostVisual->setOpacity(static_cast<uint8_t>(op));
+            double opSetting = Mod::get()->getSettingValue<double>("ghost-opacity");
+            m_fields->m_ghostVisual->setOpacity(static_cast<uint8_t>(opSetting * 2.55));
         }
     }
 
@@ -129,6 +127,9 @@ class $modify(MyPlayLayer, PlayLayer) {
  * Custom Settings Menu
  */
 class GhostSettingsLayer : public FLAlertLayer, public TextInputDelegate {
+protected:
+    std::vector<CCTextInputNode*> m_inputs;
+
 public:
     static GhostSettingsLayer* create() {
         auto ret = new GhostSettingsLayer();
@@ -201,8 +202,13 @@ public:
         input->setAllowedChars("0123456789.-");
         input->setDelegate(this);
         input->setTag(tag);
-        input->setString(std::to_string(Mod::get()->getSettingValue<double>(setting)).substr(0, 4).c_str());
+        
+        double val = Mod::get()->getSettingValue<double>(setting);
+        std::string s = std::to_string(val);
+        input->setString(s.substr(0, s.find('.') + 3).c_str());
+        
         input->setPosition(pos);
+        m_inputs.push_back(input);
         return input;
     }
 
@@ -217,10 +223,17 @@ public:
     }
 
     void textChanged(CCTextInputNode* input) override {
+        std::string str = input->getString();
+        if (str.empty() || str == "-" || str == ".") return;
+
         try {
-            double val = std::stod(input->getString());
-            if (input->getTag() == 1) Mod::get()->setSettingValue("ghost-offset", val);
-            if (input->getTag() == 2) Mod::get()->setSettingValue("ghost-opacity", std::clamp(val, 0.0, 100.0));
+            double val = std::stod(str);
+            if (input->getTag() == 1) {
+                Mod::get()->setSettingValue("ghost-offset", val);
+            } else if (input->getTag() == 2) {
+                val = std::max(0.0, std::min(100.0, val));
+                Mod::get()->setSettingValue("ghost-opacity", val);
+            }
             refreshPlayLayer();
         } catch (...) {}
     }
@@ -229,7 +242,18 @@ public:
         if (auto pl = PlayLayer::get()) static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
     }
 
-    void onClose(CCObject*) { this->removeFromParentAndCleanup(true); }
+    void onClose(CCObject*) {
+        // Prevent crash: force all inputs to detach before deleting the layer
+        for (auto inp : m_inputs) {
+            inp->setDelegate(nullptr);
+            inp->onClickTrackNode(false);
+        }
+        this->removeFromParentAndCleanup(true);
+    }
+
+    void keyBackClicked() override { onClose(nullptr); }
+
+    bool ccTouchBegan(CCTouch* touch, CCEvent* event) override { return true; }
 };
 
 /**

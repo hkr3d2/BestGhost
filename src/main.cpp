@@ -1,4 +1,5 @@
 #include <Geode/Geode.hpp>
+#include <Geode/loader/SettingV3.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PauseLayer.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
@@ -226,17 +227,53 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
 };
 
 /**
- * 4. Setting Listener Fix
+ * 4. CUSTOM SETTING BUTTON LOGIC
  */
-$execute {
-    listenForSettingChanges<bool>("open-library", [](bool value) {
-        if (value) {
-            auto path = Mod::get()->getSaveDir() / "ghosts";
-            if (!fs::exists(path)) fs::create_directories(path);
-            utils::file::openFolder(path);
-            
-            // Toggle back to off
-            Mod::get()->setSettingValue("open-library", false);
+class OpenLibrarySettingNode : public SettingNodeV3 {
+protected:
+    bool init(SettingValueV3* value, float width) {
+        if (!SettingNodeV3::init(value, width)) return false;
+
+        this->setContentSize({ width, 40.f });
+
+        auto menu = CCMenu::create();
+        menu->setPosition({ width / 2, 20.f });
+        this->addChild(menu);
+
+        auto sprite = ButtonSprite::create("Open Folder", "goldFont.fnt", "GJ_button_01.png", .7f);
+        auto btn = CCMenuItemSpriteExtra::create(
+            sprite, this, menu_selector(OpenLibrarySettingNode::onOpen)
+        );
+        menu->addChild(btn);
+
+        return true;
+    }
+
+    void onOpen(CCObject*) {
+        auto path = Mod::get()->getSaveDir() / "ghosts";
+        if (!fs::exists(path)) fs::create_directories(path);
+        utils::file::openFolder(path);
+    }
+
+public:
+    static OpenLibrarySettingNode* create(SettingValueV3* value, float width) {
+        auto ret = new OpenLibrarySettingNode();
+        if (ret && ret->init(value, width)) {
+            ret->autorelease();
+            return ret;
         }
-    });
+        CC_SAFE_DELETE(ret);
+        return nullptr;
+    }
+
+    void loadValues() override {}
+    void storeValues() override {}
+    bool hasUnsavedChanges() override { return false; }
+    bool hasNonDefaultValue() override { return false; }
+    void resetToDefault() override {}
+};
+
+// Register the custom setting node
+$execute {
+    Mod::get()->addCustomSettingNode("open-library", &OpenLibrarySettingNode::create);
 }

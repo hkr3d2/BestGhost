@@ -17,9 +17,15 @@ std::vector<GhostFrame> g_bestAttemptData;
 std::vector<GhostFrame> g_currentAttemptData;
 float g_bestXAttained = 0.0f;
 
+/**
+ * Helper: Get the file path for a specific level's ghost
+ */
 std::filesystem::path getGhostPath(GJGameLevel* level) {
     auto ghostDir = Mod::get()->getSaveDir() / "ghosts";
     if (!std::filesystem::exists(ghostDir)) std::filesystem::create_directories(ghostDir);
+    
+    // Use Level ID for official levels, or the Level Name/Account ID combo for user levels if ID is weird
+    // But per your request, we strictly use ID for the filename.
     return ghostDir / (std::to_string(level->m_levelID.value()) + ".dat");
 }
 
@@ -28,17 +34,24 @@ class $modify(MyPlayLayer, PlayLayer) {
         CCSprite* m_ghostVisual = nullptr;
         CCLabelBMFont* m_statusLabel = nullptr;
         size_t m_playbackIndex = 0;
-        int m_sessionAttempt = 0; // Tracks attempts in this specific session
+        int m_sessionAttempt = 0; 
     };
 
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
         
+        // RESET EVERYTHING
         g_currentAttemptData.clear(); 
         g_bestAttemptData.clear();
         g_bestXAttained = 0.0f;
         m_fields->m_playbackIndex = 0;
-        m_fields->m_sessionAttempt = 1; // Start at attempt 1
+        m_fields->m_sessionAttempt = 1; // Force start at 1 for calibration
+
+        // --- ID 0 SAFEGUARD ---
+        if (level->m_levelID.value() == 0) {
+            log::info("Ghost: Level ID is 0. Mod disabled for this session.");
+            return true; 
+        }
 
         // 1. LOAD GHOST FROM DISK
         auto path = getGhostPath(level);
@@ -75,12 +88,11 @@ class $modify(MyPlayLayer, PlayLayer) {
     }
 
     void updateStatusUI() {
-        if (!m_fields->m_statusLabel) return;
+        if (!m_fields->m_statusLabel || this->m_level->m_levelID.value() == 0) return;
         
-        // If it's the first attempt of the session, we are just warming up/recording
         if (m_fields->m_sessionAttempt == 1) {
             m_fields->m_statusLabel->setString("Attempt 1: Calibrating...");
-            m_fields->m_statusLabel->setColor({ 255, 255, 100 }); // Yellow for calibration
+            m_fields->m_statusLabel->setColor({ 255, 255, 100 });
         } else {
             if (g_bestAttemptData.empty()) {
                 m_fields->m_statusLabel->setString("Ghost: Recording...");
@@ -95,7 +107,9 @@ class $modify(MyPlayLayer, PlayLayer) {
     void resetLevel() {
         PlayLayer::resetLevel();
         
-        // Only save data IF it wasn't the first "calibration" attempt
+        if (this->m_level->m_levelID.value() == 0) return;
+
+        // Save logic (Skip Attempt 1)
         if (m_fields->m_sessionAttempt > 1 && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
             if (currentMaxX > g_bestXAttained) {
@@ -110,9 +124,7 @@ class $modify(MyPlayLayer, PlayLayer) {
             }
         }
 
-        // Increment session attempt
         m_fields->m_sessionAttempt++;
-        
         g_currentAttemptData.clear(); 
         m_fields->m_playbackIndex = 0;
         if (m_fields->m_ghostVisual) m_fields->m_ghostVisual->setVisible(false);
@@ -122,7 +134,8 @@ class $modify(MyPlayLayer, PlayLayer) {
 
     void levelComplete() {
         PlayLayer::levelComplete();
-        // Only save victory if it wasn't the skipped first attempt
+        if (this->m_level->m_levelID.value() == 0) return;
+
         if (m_fields->m_sessionAttempt > 1) {
             g_bestAttemptData = g_currentAttemptData;
             auto path = getGhostPath(this->m_level);
@@ -140,25 +153,27 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto playLayer = typeinfo_cast<PlayLayer*>(this);
         if (!playLayer || playLayer->m_isPaused) return;
 
+        // ID 0 Check
+        if (playLayer->m_level->m_levelID.value() == 0) return;
+
         auto player = playLayer->m_player1;
         if (!player) return;
 
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
 
-        // RECORDING: Skip storing data if it's attempt 1
+        // Skip everything if Attempt 1
         if (myPL->m_fields->m_sessionAttempt > 1) {
             g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
-        }
 
-        // PLAYBACK: Skip showing ghost if it's attempt 1
-        if (myPL->m_fields->m_sessionAttempt > 1 && myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
-            size_t index = myPL->m_fields->m_playbackIndex;
-            if (index < g_bestAttemptData.size()) {
-                myPL->m_fields->m_ghostVisual->setVisible(true);
-                myPL->m_fields->m_ghostVisual->setPosition({ g_bestAttemptData[index].x, g_bestAttemptData[index].y });
-                myPL->m_fields->m_playbackIndex++;
-            } else {
-                myPL->m_fields->m_ghostVisual->setVisible(false);
+            if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
+                size_t index = myPL->m_fields->m_playbackIndex;
+                if (index < g_bestAttemptData.size()) {
+                    myPL->m_fields->m_ghostVisual->setVisible(true);
+                    myPL->m_fields->m_ghostVisual->setPosition({ g_bestAttemptData[index].x, g_bestAttemptData[index].y });
+                    myPL->m_fields->m_playbackIndex++;
+                } else {
+                    myPL->m_fields->m_ghostVisual->setVisible(false);
+                }
             }
         }
     }

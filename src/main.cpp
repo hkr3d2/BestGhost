@@ -99,21 +99,22 @@ class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
 
-        // 1. Try common menu IDs
+        // Target the settings menu (bottom right usually)
         auto menu = this->getChildByID("settings-button-menu");
         if (!menu) menu = this->getChildByID("right-button-menu");
-        
-        // 2. Bruteforce: If no ID found, look for any menu on the right side of the screen
-        if (!menu) {
-            CCArrayExt<CCNode*> children = this->getChildren();
-            for (auto* child : children) {
-                if (auto* m = typeinfo_cast<CCMenu*>(child)) {
-                    // Right-side menus usually have a high X position
-                    if (m->getPositionX() > CCDirector::get()->getWinSize().width / 2) {
-                        menu = m;
-                        break;
-                    }
-                }
+        if (!menu) menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
+
+        if (menu) {
+            auto toggler = CCMenuItemToggler::createWithStandardSprites(
+                this, menu_selector(MyPauseLayer::onToggleGhost), 0.65f
+            );
+            toggler->setID("ghost-toggle"_spr);
+            toggler->toggle(g_isRecordingEnabled);
+            
+            menu->addChild(toggler);
+            menu->updateLayout();
+        }
+    }
             }
         }
 

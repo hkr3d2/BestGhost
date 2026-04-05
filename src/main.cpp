@@ -15,7 +15,7 @@ struct GhostFrame {
 };
 
 // Global State
-bool g_isRecordingEnabled = false;
+bool g_isRecordingEnabled = false; // Always starts false for a new session
 std::vector<GhostFrame> g_bestAttemptData;
 std::vector<GhostFrame> g_currentAttemptData;
 float g_bestXAttained = 0.0f;
@@ -69,7 +69,10 @@ class $modify(MyPlayLayer, PlayLayer) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
 
         loadGhostFile(level->m_levelID.value());
-        g_isRecordingEnabled = false;
+        
+        // CRITICAL: Reset recording to false every time a level starts
+        g_isRecordingEnabled = false; 
+        
         m_fields->m_timeCounter = 0.0;
         g_currentAttemptData.clear();
 
@@ -104,6 +107,7 @@ class $modify(MyPlayLayer, PlayLayer) {
             m_fields->m_statusLabel->setString("MODE: REPLAY (NO SAVE)");
             m_fields->m_statusLabel->setColor({ 100, 255, 100 });
         } else {
+            // Uses the global flag that the user must manually toggle
             m_fields->m_statusLabel->setString(g_isRecordingEnabled ? "BestGhost: RECORDING" : "BestGhost: OFF");
             m_fields->m_statusLabel->setColor(g_isRecordingEnabled ? ccColor3B{0, 255, 255} : ccColor3B{200, 200, 200});
         }
@@ -135,23 +139,29 @@ class $modify(MyPlayLayer, PlayLayer) {
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
+        
         auto menu = this->getChildByID("right-button-menu");
         if (!menu) menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
+        
         if (menu) {
-            auto toggler = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(MyPauseLayer::onToggleGhost), 0.6f);
-            toggler->setID("ghost-toggle"_spr);
-            toggler->toggle(g_isRecordingEnabled);
-            menu->addChild(toggler);
-            toggler->setPosition({249.0f, 116.0f}); 
+            auto settingsSprite = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png");
+            settingsSprite->setScale(0.7f);
+
+            auto settingsBtn = CCMenuItemSpriteExtra::create(
+                settingsSprite,
+                this,
+                menu_selector(MyPauseLayer::onOpenGhostSettings)
+            );
+            
+            settingsBtn->setID("ghost-settings-btn"_spr);
+            menu->addChild(settingsBtn);
+            settingsBtn->setPosition({249.0f, 116.0f}); 
             menu->updateLayout();
         }
     }
 
-    void onToggleGhost(CCObject* sender) {
-        g_isRecordingEnabled = !static_cast<CCMenuItemToggler*>(sender)->isOn();
-        if (auto pl = PlayLayer::get()) {
-            static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
-        }
+    void onOpenGhostSettings(CCObject* sender) {
+        geode::openSettings(Mod::get());
     }
 };
 
@@ -172,6 +182,7 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
 
         bool isReplay = Mod::get()->getSettingValue<bool>("replay-mode");
 
+        // Uses the volatile global flag
         if (g_isRecordingEnabled && !isReplay) {
             g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
         }
@@ -205,9 +216,23 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
 };
 
 /**
- * Library Listener
+ * Settings Change Listener
  */
 $execute {
+    // When the setting "ghost-recording" is toggled in the menu, update the GLOBAL flag
+    listenForSettingChanges<bool>("ghost-recording", [](bool value) {
+        g_isRecordingEnabled = value;
+        if (auto pl = PlayLayer::get()) {
+             static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
+        }
+    });
+    
+    listenForSettingChanges<bool>("replay-mode", [](bool value) {
+        if (auto pl = PlayLayer::get()) {
+             static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
+        }
+    });
+
     listenForSettingChanges<bool>("open-library", [](bool value) {
         if (value) {
             auto path = Mod::get()->getSaveDir() / "ghosts";

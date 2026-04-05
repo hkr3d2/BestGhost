@@ -14,25 +14,38 @@
     "tags": ["gameplay", "practice"],
     "dependencies": {},
     "settings": {
-        "ghost-opacity": {
-            "name": "Ghost Opacity",
-            "description": "Opacity of the ghost (0-100)",
-            "type": "int",
-            "default": 70,
-            "min": 10,
-            "max": 100
-        },
-        "show-click-indicators": {
-            "name": "Show Click Indicators",
-            "description": "Show rings when the ghost clicks",
-            "type": "bool",
-            "default": false
-        },
-        "show-overlay": {
-            "name": "Show Comparison Overlay",
-            "description": "Show text comparing your progress to the ghost",
-            "type": "bool",
-            "default": false
+        "ghost-offset": {
+        "name": "Ghost X-Offset",
+        "description": "How far behind the ghost is (negative is behind).",
+        "type": "float",
+        "default": -30.0,
+        "min": -150.0,
+        "max": 0.0,
+        "control": "slider"
+    },
+    "show-indicator": {
+        "name": "Show Status Label",
+        "description": "Toggle the 'BestGhost: ACTIVE' text at the bottom.",
+        "type": "bool",
+        "default": true
+    },
+    "replay-only": {
+        "name": "Replay Only Mode",
+        "description": "The ghost will play, but your current run will NOT be recorded.",
+        "type": "bool",
+        "default": false
+    },
+    "spectate-mode": {
+        "name": "Spectate Mode",
+        "description": "Automatically follows the ghost. Theater mode!",
+        "type": "bool",
+        "default": false
+    },
+    "open-library": {
+        "name": "Open Ghost Library",
+        "description": "Open the folder where .ghst files are stored to share them.",
+        "type": "custom",
+        "control": "button"
         }
     }
 }

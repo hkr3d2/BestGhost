@@ -3,38 +3,30 @@
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <vector>
 #include <fstream>
+#include <filesystem>
 
 using namespace geode::prelude;
 
-// Structure for ghost data
 struct GhostFrame {
     float x;
     float y;
 };
 
-// Global storage
+// Global session storage
 std::vector<GhostFrame> g_bestAttemptData;
 std::vector<GhostFrame> g_currentAttemptData;
 float g_bestXAttained = 0.0f;
 
-/**
- * Helper: Get the file path for a specific level's ghost
- */
 std::filesystem::path getGhostPath(GJGameLevel* level) {
     auto ghostDir = Mod::get()->getSaveDir() / "ghosts";
-    if (!std::filesystem::exists(ghostDir)) {
-        std::filesystem::create_directories(ghostDir);
-    }
-    // Files are named based on Level ID: ghost_123.dat
+    if (!std::filesystem::exists(ghostDir)) std::filesystem::create_directories(ghostDir);
     return ghostDir / (std::to_string(level->m_levelID.value()) + ".dat");
 }
 
-/**
- * 1. PlayLayer Hooks
- */
 class $modify(MyPlayLayer, PlayLayer) {
     struct Fields {
         CCSprite* m_ghostVisual = nullptr;
+        CCLabelBMFont* m_statusLabel = nullptr;
         size_t m_playbackIndex = 0;
     };
 
@@ -46,7 +38,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         g_bestXAttained = 0.0f;
         m_fields->m_playbackIndex = 0;
 
-        // --- LOAD GHOST FROM DISK ---
+        // 1. LOAD GHOST
         auto path = getGhostPath(level);
         if (std::filesystem::exists(path)) {
             std::ifstream file(path, std::ios::binary);
@@ -54,13 +46,19 @@ class $modify(MyPlayLayer, PlayLayer) {
             while (file.read(reinterpret_cast<char*>(&frame), sizeof(GhostFrame))) {
                 g_bestAttemptData.push_back(frame);
             }
-            if (!g_bestAttemptData.empty()) {
-                g_bestXAttained = g_bestAttemptData.back().x;
-            }
-            log::info("Ghost: Loaded {} frames from disk.", g_bestAttemptData.size());
+            if (!g_bestAttemptData.empty()) g_bestXAttained = g_bestAttemptData.back().x;
         }
 
-        // Create Visual
+        // 2. CREATE STATUS LABEL
+        // Using bigFont.fnt for that classic GD look
+        auto label = CCLabelBMFont::create("", "bigFont.fnt");
+        label->setScale(0.4f);
+        label->setOpacity(150);
+        label->setPosition({ CCDirector::get()->getWinSize().width / 2, 40 });
+        this->addChild(label, 100);
+        m_fields->m_statusLabel = label;
+
+        // 3. CREATE GHOST SPRITE
         auto ghost = CCSprite::createWithSpriteFrameName("GJ_square01_001.png"); 
         if (ghost) {
             ghost->setScale(0.6f);
@@ -71,7 +69,20 @@ class $modify(MyPlayLayer, PlayLayer) {
             if (this->m_objectLayer) this->m_objectLayer->addChild(ghost, 1000);
         }
 
+        updateStatusLabel();
         return true;
+    }
+
+    void updateStatusLabel() {
+        if (!m_fields->m_statusLabel) return;
+        
+        if (g_bestAttemptData.empty()) {
+            m_fields->m_statusLabel->setString("Ghost: Recording...");
+            m_fields->m_statusLabel->setColor({ 255, 100, 100 }); // Reddish for recording
+        } else {
+            m_fields->m_statusLabel->setString("Ghost: Replaying Best");
+            m_fields->m_statusLabel->setColor({ 100, 255, 255 }); // Cyan for replaying
+        }
     }
 
     void resetLevel() {
@@ -83,37 +94,32 @@ class $modify(MyPlayLayer, PlayLayer) {
                 g_bestXAttained = currentMaxX;
                 g_bestAttemptData = g_currentAttemptData;
 
-                // --- SAVE GHOST TO DISK ---
                 auto path = getGhostPath(this->m_level);
                 std::ofstream file(path, std::ios::binary);
                 for (auto& frame : g_bestAttemptData) {
                     file.write(reinterpret_cast<const char*>(&frame), sizeof(GhostFrame));
                 }
-                log::info("Ghost: New best saved to disk!");
             }
         }
 
         g_currentAttemptData.clear(); 
         m_fields->m_playbackIndex = 0;
         if (m_fields->m_ghostVisual) m_fields->m_ghostVisual->setVisible(false);
+        
+        updateStatusLabel();
     }
 
     void levelComplete() {
         PlayLayer::levelComplete();
-        // Force save on 100%
         g_bestAttemptData = g_currentAttemptData;
         auto path = getGhostPath(this->m_level);
         std::ofstream file(path, std::ios::binary);
         for (auto& frame : g_bestAttemptData) {
             file.write(reinterpret_cast<const char*>(&frame), sizeof(GhostFrame));
         }
-        log::info("Ghost: Victory run saved to disk.");
     }
 };
 
-/**
- * 2. GJBaseGameLayer Hooks
- */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
         GJBaseGameLayer::update(dt);

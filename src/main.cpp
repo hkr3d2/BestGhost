@@ -226,18 +226,16 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
 };
 
 /**
- * 4. Setting Listener for "Open Library"
- * In mod.json, keep "open-library" as a "bool" (checkbox).
- * When the user clicks it, we open the folder and turn the checkbox back off.
+ * 4. Setting Listener Fix
  */
 $execute {
-    listenForSettingChanges("open-library", [](auto value) {
+    listenForSettingChanges<bool>("open-library", [](bool value) {
         if (value) {
             auto path = Mod::get()->getSaveDir() / "ghosts";
             if (!fs::exists(path)) fs::create_directories(path);
             utils::file::openFolder(path);
             
-            // Turn the toggle back off so it acts like a button
+            // Toggle back to off
             Mod::get()->setSettingValue("open-library", false);
         }
     });

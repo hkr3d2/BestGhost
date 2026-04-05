@@ -14,6 +14,12 @@
     "tags": ["gameplay", "practice"],
     "dependencies": {},
    "settings": {
+       "fix-fps-offset": {
+        "name": "Fix Offset Issues (60 FPS)",
+        "description": "Ensures the offset remains consistent regardless of your monitor's refresh rate.",
+        "type": "bool",
+        "default": true
+    },
     "ghost-offset": {
         "name": "Ghost X-Offset",
         "description": "How far behind the ghost is (negative is behind).",

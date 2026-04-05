@@ -35,10 +35,7 @@ void saveGhostFile(int levelID) {
     std::ofstream file(getGhostPath(levelID), std::ios::binary);
     if (!file.is_open()) return;
 
-    // Write the distance first as a header
     file.write(reinterpret_cast<char*>(&g_bestXAttained), sizeof(float));
-    
-    // Write the frames
     for (const auto& frame : g_bestAttemptData) {
         file.write(reinterpret_cast<const char*>(&frame), sizeof(GhostFrame));
     }
@@ -206,7 +203,7 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
             if (index < g_bestAttemptData.size()) {
                 myPL->m_fields->m_ghostVisual->setVisible(true);
                 
-                float offset = Mod::get()->getSettingValue<double>("ghost-offset");
+                float offset = static_cast<float>(Mod::get()->getSettingValue<double>("ghost-offset"));
                 float targetX = g_bestAttemptData[index].x;
                 float targetY = g_bestAttemptData[index].y;
 
@@ -229,12 +226,19 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
 };
 
 /**
- * 4. Custom Settings Logic
+ * 4. Setting Listener for "Open Library"
+ * In mod.json, keep "open-library" as a "bool" (checkbox).
+ * When the user clicks it, we open the folder and turn the checkbox back off.
  */
 $execute {
-    Mod::get()->addCustomSetting<void>("open-library", [](auto* setting) {
-        auto path = Mod::get()->getSaveDir() / "ghosts";
-        if (!fs::exists(path)) fs::create_directories(path);
-        utils::file::openFolder(path);
+    listenForSettingChanges("open-library", [](auto value) {
+        if (value) {
+            auto path = Mod::get()->getSaveDir() / "ghosts";
+            if (!fs::exists(path)) fs::create_directories(path);
+            utils::file::openFolder(path);
+            
+            // Turn the toggle back off so it acts like a button
+            Mod::get()->setSettingValue("open-library", false);
+        }
     });
 }

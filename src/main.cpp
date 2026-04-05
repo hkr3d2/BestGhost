@@ -21,7 +21,7 @@ std::vector<GhostFrame> g_currentAttemptData;
 float g_bestXAttained = 0.0f;
 
 /**
- * Ghost Library: File Management
+ * File Management
  */
 fs::path getGhostPath(int levelID) {
     auto path = Mod::get()->getSaveDir() / "ghosts";
@@ -31,15 +31,12 @@ fs::path getGhostPath(int levelID) {
 
 void saveGhostFile(int levelID) {
     if (g_bestAttemptData.empty()) return;
-    
     std::ofstream file(getGhostPath(levelID), std::ios::binary);
     if (!file.is_open()) return;
-
     file.write(reinterpret_cast<char*>(&g_bestXAttained), sizeof(float));
     for (const auto& frame : g_bestAttemptData) {
         file.write(reinterpret_cast<const char*>(&frame), sizeof(GhostFrame));
     }
-    file.close();
 }
 
 void loadGhostFile(int levelID) {
@@ -49,21 +46,17 @@ void loadGhostFile(int levelID) {
         g_bestXAttained = 0.0f;
         return;
     }
-
     std::ifstream file(path, std::ios::binary);
     if (!file.is_open()) return;
-
     file.read(reinterpret_cast<char*>(&g_bestXAttained), sizeof(float));
-
     GhostFrame frame;
     while (file.read(reinterpret_cast<char*>(&frame), sizeof(GhostFrame))) {
         g_bestAttemptData.push_back(frame);
     }
-    file.close();
 }
 
 /**
- * 1. PlayLayer Hooks
+ * PlayLayer Hooks
  */
 class $modify(MyPlayLayer, PlayLayer) {
     struct Fields {
@@ -84,7 +77,6 @@ class $modify(MyPlayLayer, PlayLayer) {
         label->setScale(0.35f);
         label->setOpacity(120);
         label->setPosition({ CCDirector::get()->getWinSize().width / 2, 25 });
-        label->setVisible(Mod::get()->getSettingValue<bool>("show-indicator"));
         this->addChild(label, 100);
         m_fields->m_statusLabel = label;
 
@@ -105,33 +97,13 @@ class $modify(MyPlayLayer, PlayLayer) {
     void updateUI() {
         if (!m_fields->m_statusLabel) return;
         m_fields->m_statusLabel->setVisible(Mod::get()->getSettingValue<bool>("show-indicator"));
-        
-        bool replayOnly = Mod::get()->getSettingValue<bool>("replay-only");
-        bool spectate = Mod::get()->getSettingValue<bool>("spectate-mode");
-
-        if (!g_isRecordingEnabled) {
-            m_fields->m_statusLabel->setString("BestGhost: OFF");
-            m_fields->m_statusLabel->setColor({ 200, 200, 200 });
-        } else {
-            if (spectate) {
-                m_fields->m_statusLabel->setString("BestGhost: SPECTATING");
-                m_fields->m_statusLabel->setColor({ 150, 0, 255 });
-            } else if (replayOnly) {
-                m_fields->m_statusLabel->setString("BestGhost: REPLAY ONLY");
-                m_fields->m_statusLabel->setColor({ 255, 200, 0 });
-            } else {
-                m_fields->m_statusLabel->setString(g_bestAttemptData.empty() ? "BestGhost: RECORDING..." : "BestGhost: ACTIVE");
-                m_fields->m_statusLabel->setColor({ 0, 255, 255 });
-            }
-        }
+        m_fields->m_statusLabel->setString(g_isRecordingEnabled ? "BestGhost: ACTIVE" : "BestGhost: OFF");
+        m_fields->m_statusLabel->setColor(g_isRecordingEnabled ? ccColor3B{0, 255, 255} : ccColor3B{200, 200, 200});
     }
 
     void resetLevel() {
         PlayLayer::resetLevel();
-        bool replayOnly = Mod::get()->getSettingValue<bool>("replay-only");
-        bool spectate = Mod::get()->getSettingValue<bool>("spectate-mode");
-
-        if (g_isRecordingEnabled && !g_currentAttemptData.empty() && !replayOnly && !spectate) {
+        if (g_isRecordingEnabled && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
             if (currentMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
@@ -139,7 +111,6 @@ class $modify(MyPlayLayer, PlayLayer) {
                 saveGhostFile(m_level->m_levelID.value());
             }
         }
-        
         g_currentAttemptData.clear();
         m_fields->m_playbackIndex = 0;
         if (m_fields->m_ghostVisual) m_fields->m_ghostVisual->setVisible(false);
@@ -148,36 +119,29 @@ class $modify(MyPlayLayer, PlayLayer) {
 };
 
 /**
- * 2. PauseLayer Hooks
+ * PauseLayer Hooks
  */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
-        auto menu = this->getChildByID("settings-button-menu");
-        if (!menu) menu = this->getChildByID("right-button-menu");
-        if (!menu) menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
-
+        auto menu = this->getChildByID("right-button-menu");
         if (menu) {
-            auto toggler = CCMenuItemToggler::createWithStandardSprites(
-                this, menu_selector(MyPauseLayer::onToggleGhost), 0.6f
-            );
-            toggler->setID("ghost-toggle"_spr);
+            auto toggler = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(MyPauseLayer::onToggleGhost), 0.6f);
             toggler->toggle(g_isRecordingEnabled);
             menu->addChild(toggler);
-            toggler->setPosition({249.0f, 116.0f}); 
         }
     }
 
     void onToggleGhost(CCObject* sender) {
-        auto toggler = static_cast<CCMenuItemToggler*>(sender);
-        g_isRecordingEnabled = !toggler->isOn(); 
-        this->onResume(nullptr);
-        if (auto pl = PlayLayer::get()) pl->resetLevel();
+        g_isRecordingEnabled = !static_cast<CCMenuItemToggler*>(sender)->isOn();
+        if (auto pl = PlayLayer::get()) {
+            static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
+        }
     }
 };
 
 /**
- * 3. Update Loop
+ * Update Loop with Position Slider
  */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
@@ -190,43 +154,36 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto player = playLayer->m_player1;
         if (!player) return;
 
-        bool spectate = Mod::get()->getSettingValue<bool>("spectate-mode");
-        bool replayOnly = Mod::get()->getSettingValue<bool>("replay-only");
+        // 1. Record Frame
+        g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
 
-        if (!replayOnly && !spectate) {
-            g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
-        }
-
+        // 2. Playback with Slider Offset
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
         if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
-            size_t index = myPL->m_fields->m_playbackIndex;
-            if (index < g_bestAttemptData.size()) {
+            size_t idx = myPL->m_fields->m_playbackIndex;
+
+            if (idx < g_bestAttemptData.size()) {
+                // Fetch the offset from settings (float)
+                float xOffset = static_cast<float>(Mod::get()->getSettingValue<double>("ghost-offset"));
+                
                 myPL->m_fields->m_ghostVisual->setVisible(true);
                 
-                float offset = static_cast<float>(Mod::get()->getSettingValue<double>("ghost-offset"));
-                float targetX = g_bestAttemptData[index].x;
-                float targetY = g_bestAttemptData[index].y;
-
-                if (spectate) {
-                    player->setPosition({ targetX, targetY });
-                    player->m_isDead = false;
-                    player->setVisible(false);
-                } else {
-                    player->setVisible(true);
-                }
-
-                myPL->m_fields->m_ghostVisual->setPosition({ targetX + offset, targetY });
+                // Apply the offset to the recorded X position
+                myPL->m_fields->m_ghostVisual->setPosition({ 
+                    g_bestAttemptData[idx].x + xOffset, 
+                    g_bestAttemptData[idx].y 
+                });
+                
                 myPL->m_fields->m_playbackIndex++;
             } else {
                 myPL->m_fields->m_ghostVisual->setVisible(false);
-                if (spectate) playLayer->resetLevel();
             }
         }
     }
 };
 
 /**
- * 4. Setting Listener Fix
+ * Library Listener
  */
 $execute {
     listenForSettingChanges<bool>("open-library", [](bool value) {
@@ -234,8 +191,6 @@ $execute {
             auto path = Mod::get()->getSaveDir() / "ghosts";
             if (!fs::exists(path)) fs::create_directories(path);
             utils::file::openFolder(path);
-            
-            // Toggle back to off
             Mod::get()->setSettingValue("open-library", false);
         }
     });

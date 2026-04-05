@@ -33,7 +33,7 @@ class $modify(MyPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
 
-        // Turn OFF by default on level start (as requested)
+        // Turn OFF recording by default on entry
         g_isRecordingEnabled = false;
         
         m_fields->m_playbackIndex = 0;
@@ -79,7 +79,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         if (g_isRecordingEnabled && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
 
-            // Update only if this was the BEST run so far
+            // Only update if we beat our previous Best X
             if (currentMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
                 g_bestAttemptData = g_currentAttemptData;
@@ -94,7 +94,7 @@ class $modify(MyPlayLayer, PlayLayer) {
 };
 
 /**
- * 2. PauseLayer Hooks - Positioned UNDER settings
+ * 2. PauseLayer Hooks - Adjusted Placement
  */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
@@ -111,8 +111,8 @@ class $modify(MyPauseLayer, PauseLayer) {
             
             menu->addChild(toggler);
             
-            // Move it UNDER the settings gear (Negative Y)
-            toggler->setPosition({0.0f, -40.0f}); 
+            // Placed to the LEFT (-40) and slightly DOWN (-20)
+            toggler->setPosition({-40.0f, -20.0f}); 
             menu->updateLayout();
         }
     }
@@ -142,10 +142,8 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto player = playLayer->m_player1;
         if (!player) return;
 
-        // Record current frame
         g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
 
-        // Playback best ghost
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
         if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
             size_t index = myPL->m_fields->m_playbackIndex;

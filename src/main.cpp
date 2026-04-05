@@ -3,6 +3,7 @@
 #include <Geode/modify/PauseLayer.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <vector>
+#include <sstream>
 
 using namespace geode::prelude;
 
@@ -26,7 +27,6 @@ float g_bestXAttained = 0.0f;
 void saveGhostData(int levelID) {
     if (g_bestAttemptData.empty()) return;
 
-    // We store the data as a string of floats: "x1,y1|x2,y2|..."
     std::string encoded;
     for (const auto& frame : g_bestAttemptData) {
         encoded += std::to_string(frame.x) + "," + std::to_string(frame.y) + "|";
@@ -51,9 +51,13 @@ void loadGhostData(int levelID) {
     while (std::getline(ss, segment, '|')) {
         size_t comma = segment.find(',');
         if (comma != std::string::npos) {
-            float x = std::static_pointer_cast<float>(std::stof(segment.substr(0, comma)));
-            float y = std::static_pointer_cast<float>(std::stof(segment.substr(comma + 1)));
-            g_bestAttemptData.push_back({x, y});
+            try {
+                float x = std::stof(segment.substr(0, comma));
+                float y = std::stof(segment.substr(comma + 1));
+                g_bestAttemptData.push_back({x, y});
+            } catch (...) {
+                continue; 
+            }
         }
     }
 }
@@ -71,7 +75,7 @@ class $modify(MyPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
 
-        // Load saved ghost for this specific level
+        // Load saved ghost for this level
         loadGhostData(level->m_levelID.value());
 
         g_isRecordingEnabled = false;
@@ -119,8 +123,6 @@ class $modify(MyPlayLayer, PlayLayer) {
             if (currentMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
                 g_bestAttemptData = g_currentAttemptData;
-                
-                // Save immediately when a new best is reached
                 saveGhostData(m_level->m_levelID.value());
             }
         }
@@ -151,8 +153,8 @@ class $modify(MyPauseLayer, PauseLayer) {
             toggler->toggle(g_isRecordingEnabled);
             menu->addChild(toggler);
 
-            // Using your exact working coordinates
-            toggler->setPosition({249, 116.0f}); 
+            // Manual coordinates from your working version
+            toggler->setPosition({249.0f, 116.0f}); 
         }
     }
 

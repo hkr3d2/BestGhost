@@ -56,6 +56,122 @@ void loadGhostFile(int levelID) {
 }
 
 /**
+ * Custom Settings Menu
+ */
+class GhostSettingsLayer : public FLAlertLayer {
+public:
+    static GhostSettingsLayer* create() {
+        auto ret = new GhostSettingsLayer();
+        if (ret && ret->init(150)) {
+            ret->autorelease();
+            return ret;
+        }
+        CC_SAFE_DELETE(ret);
+        return nullptr;
+    }
+
+    bool init(int opacity) {
+        if (!colorPanelInit(opacity)) return false;
+
+        auto winSize = CCDirector::get()->getWinSize();
+        m_mainLayer = CCLayer::create();
+        this->addChild(m_mainLayer);
+
+        auto bg = CCScale9Sprite::create("GJ_square01.png");
+        bg->setContentSize({ 220, 180 });
+        bg->setPosition(winSize / 2);
+        m_mainLayer->addChild(bg);
+
+        auto menu = CCMenu::create();
+        m_mainLayer->addChild(menu);
+
+        auto title = CCLabelBMFont::create("Ghost Settings", "goldFont.fnt");
+        title->setPosition({ winSize.width / 2, winSize.height / 2 + 70 });
+        title->setScale(0.7f);
+        m_mainLayer->addChild(title);
+
+        // Recording Toggle
+        auto recordLabel = CCLabelBMFont::create("Record Run", "bigFont.fnt");
+        recordLabel->setScale(0.4f);
+        recordLabel->setPosition({ winSize.width / 2 - 40, winSize.height / 2 + 25 });
+        m_mainLayer->addChild(recordLabel);
+
+        auto recordToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.6f);
+        recordToggle->setPosition({ 50, 25 });
+        recordToggle->toggle(g_isRecordingEnabled);
+        menu->addChild(recordToggle);
+
+        // Replay Mode Toggle
+        auto replayLabel = CCLabelBMFont::create("Replay Only", "bigFont.fnt");
+        replayLabel->setScale(0.4f);
+        replayLabel->setPosition({ winSize.width / 2 - 40, winSize.height / 2 - 15 });
+        m_mainLayer->addChild(replayLabel);
+
+        auto replayToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleReplay), 0.6f);
+        replayToggle->setPosition({ 50, -15 });
+        replayToggle->toggle(Mod::get()->getSettingValue<bool>("replay-mode"));
+        menu->addChild(replayToggle);
+
+        // Folder Button
+        auto folderBtn = CCMenuItemSpriteExtra::create(
+            CCSprite::createWithSpriteFrameName("GJ_plainBtn_001.png"),
+            this,
+            menu_selector(GhostSettingsLayer::onOpenFolder)
+        );
+        auto folderIcon = CCSprite::createWithSpriteFrameName("folderIcon_001.png"_spr);
+        folderIcon->setScale(0.8f);
+        folderIcon->setPosition(folderBtn->getContentSize() / 2);
+        folderBtn->addChild(folderIcon);
+        folderBtn->setPosition({ 0, -60 });
+        menu->addChild(folderBtn);
+
+        // Close Button
+        auto closeBtn = CCMenuItemSpriteExtra::create(
+            CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"),
+            this,
+            menu_selector(GhostSettingsLayer::onClose)
+        );
+        closeBtn->setPosition({ -100, 80 });
+        menu->addChild(closeBtn);
+
+        this->setTouchEnabled(true);
+        this->setKeypadEnabled(true);
+
+        return true;
+    }
+
+    void onToggleRecord(CCObject* sender) {
+        g_isRecordingEnabled = !static_cast<CCMenuItemToggler*>(sender)->isOn();
+        if (auto pl = PlayLayer::get()) {
+            // Need to update the UI label in PlayLayer immediately
+            static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
+        }
+    }
+
+    void onToggleReplay(CCObject* sender) {
+        bool val = !static_cast<CCMenuItemToggler*>(sender)->isOn();
+        Mod::get()->setSettingValue("replay-mode", val);
+        if (auto pl = PlayLayer::get()) {
+            static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
+        }
+    }
+
+    void onOpenFolder(CCObject*) {
+        auto path = Mod::get()->getSaveDir() / "ghosts";
+        if (!fs::exists(path)) fs::create_directories(path);
+        utils::file::openFolder(path);
+    }
+
+    void onClose(CCObject*) {
+        this->removeFromParent();
+    }
+
+    void keyBackClicked() override {
+        onClose(nullptr);
+    }
+};
+
+/**
  * PlayLayer Hooks
  */
 class $modify(MyPlayLayer, PlayLayer) {
@@ -69,12 +185,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
 
         loadGhostFile(level->m_levelID.value());
-        
-        // Reset volatile flag
         g_isRecordingEnabled = false; 
-        
-        // Ensure the setting toggle in the menu matches the reset state
-        Mod::get()->setSettingValue("ghost-recording", false);
 
         m_fields->m_timeCounter = 0.0;
         g_currentAttemptData.clear();
@@ -152,7 +263,7 @@ class $modify(MyPauseLayer, PauseLayer) {
             auto settingsBtn = CCMenuItemSpriteExtra::create(
                 settingsSprite,
                 this,
-                menu_selector(MyPauseLayer::onOpenGhostSettings)
+                menu_selector(MyPauseLayer::onOpenCustomGhostMenu)
             );
             
             settingsBtn->setID("ghost-settings-btn"_spr);
@@ -162,9 +273,9 @@ class $modify(MyPauseLayer, PauseLayer) {
         }
     }
 
-    void onOpenGhostSettings(CCObject* sender) {
-        // Calling it via the global namespace to avoid the 'get' parsing error
-        ::openSettings(Mod::get());
+    void onOpenCustomGhostMenu(CCObject* sender) {
+        auto layer = GhostSettingsLayer::create();
+        this->addChild(layer, 100);
     }
 };
 
@@ -215,30 +326,3 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         }
     }
 };
-
-/**
- * Settings Change Listener
- */
-$execute {
-    listenForSettingChanges<bool>("ghost-recording", [](bool value) {
-        g_isRecordingEnabled = value;
-        if (auto pl = PlayLayer::get()) {
-             static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
-        }
-    });
-    
-    listenForSettingChanges<bool>("replay-mode", [](bool value) {
-        if (auto pl = PlayLayer::get()) {
-             static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
-        }
-    });
-
-    listenForSettingChanges<bool>("open-library", [](bool value) {
-        if (value) {
-            auto path = Mod::get()->getSaveDir() / "ghosts";
-            if (!fs::exists(path)) fs::create_directories(path);
-            utils::file::openFolder(path);
-            Mod::get()->setSettingValue("open-library", false);
-        }
-    });
-}

@@ -133,45 +133,52 @@ public:
         return nullptr;
     }
 
+    // Force touch priority so buttons click
+    void registerWithTouchDispatcher() override {
+        CCDirector::get()->getTouchDispatcher()->addTargetedDelegate(this, -500, true);
+    }
+
     bool init(int opacity) {
         if (!FLAlertLayer::init(opacity)) return false;
 
         auto winSize = CCDirector::get()->getWinSize();
         
         auto bg = CCScale9Sprite::create("GJ_square01.png");
-        bg->setContentSize({ 240, 200 });
+        bg->setContentSize({ 240, 180 });
         bg->setPosition(winSize / 2);
         m_mainLayer->addChild(bg);
 
+        // Create manual menu with high priority
         auto menu = CCMenu::create();
+        menu->setTouchPriority(-501); 
         m_mainLayer->addChild(menu);
 
         // 1. Ghost Record Toggler
         auto recordLabel = CCLabelBMFont::create("Record Ghost", "bigFont.fnt");
         recordLabel->setScale(0.45f);
-        recordLabel->setPosition(winSize.width / 2 - 50, winSize.height / 2 + 50);
+        recordLabel->setPosition(winSize.width / 2 - 50, winSize.height / 2 + 40);
         m_mainLayer->addChild(recordLabel);
 
         auto recordToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
-        recordToggle->setPosition({ 60, 50 });
+        recordToggle->setPosition({ 60, 40 });
         recordToggle->toggle(g_isRecordingEnabled);
         menu->addChild(recordToggle);
 
         // 2. Status Label Toggler
         auto statusLabelTxt = CCLabelBMFont::create("Show Status", "bigFont.fnt");
         statusLabelTxt->setScale(0.45f);
-        statusLabelTxt->setPosition(winSize.width / 2 - 50, winSize.height / 2 + 10);
+        statusLabelTxt->setPosition(winSize.width / 2 - 50, winSize.height / 2 + 0);
         m_mainLayer->addChild(statusLabelTxt);
 
         auto statusToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleStatus), 0.7f);
-        statusToggle->setPosition({ 60, 10 });
+        statusToggle->setPosition({ 60, 0 });
         statusToggle->toggle(Mod::get()->getSettingValue<bool>("show-indicator"));
         menu->addChild(statusToggle);
 
         // 3. Offset Textbox
         auto offsetLabel = CCLabelBMFont::create("X Offset", "bigFont.fnt");
         offsetLabel->setScale(0.45f);
-        offsetLabel->setPosition(winSize.width / 2 - 50, winSize.height / 2 - 30);
+        offsetLabel->setPosition(winSize.width / 2 - 50, winSize.height / 2 - 40);
         m_mainLayer->addChild(offsetLabel);
 
         auto input = CCTextInputNode::create(60.f, 20.f, "0.0", "bigFont.fnt");
@@ -179,7 +186,7 @@ public:
         input->setAllowedChars("0123456789.-");
         input->setDelegate(this);
         input->setString(std::to_string(Mod::get()->getSettingValue<double>("ghost-offset")).substr(0, 4).c_str());
-        input->setPosition(winSize.width / 2 + 55, winSize.height / 2 - 30);
+        input->setPosition(winSize.width / 2 + 60, winSize.height / 2 - 40);
         m_mainLayer->addChild(input);
 
         // Close Button
@@ -188,8 +195,11 @@ public:
             this,
             menu_selector(GhostSettingsLayer::onClose)
         );
-        closeBtn->setPosition({ -105, 85 });
+        closeBtn->setPosition({ -105, 75 });
         menu->addChild(closeBtn);
+
+        this->setTouchEnabled(true);
+        this->setKeypadEnabled(true);
 
         return true;
     }
@@ -213,8 +223,13 @@ public:
     }
 
     void onClose(CCObject*) {
+        this->setTouchEnabled(false);
         this->removeFromParentAndCleanup(true);
     }
+
+    void keyBackClicked() override { onClose(nullptr); }
+
+    bool ccTouchBegan(CCTouch* touch, CCEvent* event) override { return true; }
 };
 
 /**
@@ -223,21 +238,30 @@ public:
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
+        
         auto menu = this->getChildByID("right-button-menu");
         if (!menu) menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
+        
         if (menu) {
+            auto settingsSprite = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png");
+            settingsSprite->setScale(0.7f);
+
             auto settingsBtn = CCMenuItemSpriteExtra::create(
-                CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png"),
+                settingsSprite,
                 this,
                 menu_selector(MyPauseLayer::onOpenCustomGhostMenu)
             );
-            settingsBtn->setScale(0.7f);
+            
+            settingsBtn->setID("ghost-settings-btn"_spr);
             menu->addChild(settingsBtn);
+            // Coordinates as requested
+            settingsBtn->setPosition({249.0f, 116.0f}); 
             menu->updateLayout();
         }
     }
     void onOpenCustomGhostMenu(CCObject*) {
-        GhostSettingsLayer::create()->show();
+        auto layer = GhostSettingsLayer::create();
+        CCDirector::get()->getRunningScene()->addChild(layer, 100);
     }
 };
 

@@ -11,8 +11,9 @@ using namespace geode::prelude;
 namespace fs = std::filesystem;
 
 struct GhostFrame {
-    float x;
-    float y;
+    float x1, y1;
+    float x2, y2;
+    bool isDual;
 };
 
 // Global Session State
@@ -61,7 +62,8 @@ void loadGhostFile(int levelID) {
  */
 class $modify(MyPlayLayer, PlayLayer) {
     struct Fields {
-        CCSprite* m_ghostVisual = nullptr;
+        PlayerObject* m_ghostPlayer1 = nullptr;
+        PlayerObject* m_ghostPlayer2 = nullptr;
         CCLabelBMFont* m_statusLabel = nullptr;
         double m_timeCounter = 0.0;
     };
@@ -73,6 +75,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         m_fields->m_timeCounter = 0.0;
         g_currentAttemptData.clear();
 
+        // Status Label
         auto label = CCLabelBMFont::create("", "bigFont.fnt");
         label->setScale(0.35f);
         label->setOpacity(120);
@@ -80,14 +83,20 @@ class $modify(MyPlayLayer, PlayLayer) {
         this->addChild(label, 100);
         m_fields->m_statusLabel = label;
 
-        auto ghost = CCSprite::createWithSpriteFrameName("GJ_square01_001.png");
-        if (ghost) {
-            ghost->setScale(0.6f);
-            ghost->setOpacity(130);
-            ghost->setColor({ 0, 255, 255 });
-            ghost->setVisible(false);
-            m_fields->m_ghostVisual = ghost;
-            if (this->m_objectLayer) this->m_objectLayer->addChild(ghost, 1000);
+        // Initialize Ghost Players (Using actual game icons)
+        auto gm = GameManager::sharedState();
+        
+        m_fields->m_ghostPlayer1 = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
+        m_fields->m_ghostPlayer2 = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
+
+        float opacity = static_cast<float>(Mod::get()->getSettingValue<double>("ghost-opacity"));
+        
+        for (auto player : {m_fields->m_ghostPlayer1, m_fields->m_ghostPlayer2}) {
+            if (player) {
+                player->setOpacity(static_cast<uint8_t>(opacity * 2.55f)); // 0-100 to 0-255
+                player->setVisible(false);
+                if (this->m_objectLayer) this->m_objectLayer->addChild(player, 1000);
+            }
         }
 
         updateUI();
@@ -99,12 +108,17 @@ class $modify(MyPlayLayer, PlayLayer) {
         m_fields->m_statusLabel->setVisible(Mod::get()->getSettingValue<bool>("show-indicator"));
         m_fields->m_statusLabel->setString(g_isRecordingEnabled ? "BestGhost: RECORDING" : "BestGhost: OFF");
         m_fields->m_statusLabel->setColor(g_isRecordingEnabled ? ccColor3B{0, 255, 255} : ccColor3B{200, 200, 200});
+        
+        // Update Opacity Live
+        float op = static_cast<float>(Mod::get()->getSettingValue<double>("ghost-opacity")) * 2.55f;
+        if (m_fields->m_ghostPlayer1) m_fields->m_ghostPlayer1->setOpacity(static_cast<uint8_t>(op));
+        if (m_fields->m_ghostPlayer2) m_fields->m_ghostPlayer2->setOpacity(static_cast<uint8_t>(op));
     }
 
     void resetLevel() {
         PlayLayer::resetLevel();
         if (g_isRecordingEnabled && !g_currentAttemptData.empty()) {
-            float currentMaxX = g_currentAttemptData.back().x;
+            float currentMaxX = g_currentAttemptData.back().x1;
             if (currentMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
                 g_bestAttemptData = g_currentAttemptData;
@@ -113,7 +127,8 @@ class $modify(MyPlayLayer, PlayLayer) {
         }
         g_currentAttemptData.clear();
         m_fields->m_timeCounter = 0.0;
-        if (m_fields->m_ghostVisual) m_fields->m_ghostVisual->setVisible(false);
+        if (m_fields->m_ghostPlayer1) m_fields->m_ghostPlayer1->setVisible(false);
+        if (m_fields->m_ghostPlayer2) m_fields->m_ghostPlayer2->setVisible(false);
         updateUI();
     }
 };
@@ -133,7 +148,6 @@ public:
         return nullptr;
     }
 
-    // Force touch priority so buttons click
     void registerWithTouchDispatcher() override {
         CCDirector::get()->getTouchDispatcher()->addTargetedDelegate(this, -500, true);
     }
@@ -142,94 +156,88 @@ public:
         if (!FLAlertLayer::init(opacity)) return false;
 
         auto winSize = CCDirector::get()->getWinSize();
-        
         auto bg = CCScale9Sprite::create("GJ_square01.png");
-        bg->setContentSize({ 240, 180 });
+        bg->setContentSize({ 260, 220 });
         bg->setPosition(winSize / 2);
         m_mainLayer->addChild(bg);
 
-        // Create manual menu with high priority
         auto menu = CCMenu::create();
         menu->setTouchPriority(-501); 
         m_mainLayer->addChild(menu);
 
-        // 1. Ghost Record Toggler
-        auto recordLabel = CCLabelBMFont::create("Record Ghost", "bigFont.fnt");
-        recordLabel->setScale(0.45f);
-        recordLabel->setPosition(winSize.width / 2 - 50, winSize.height / 2 + 40);
-        m_mainLayer->addChild(recordLabel);
+        // 1. Record Toggler
+        createLabel("Record Ghost", {winSize.width / 2 - 55, winSize.height / 2 + 60});
+        auto recToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
+        recToggle->setPosition({ 65, 60 });
+        recToggle->toggle(g_isRecordingEnabled);
+        menu->addChild(recToggle);
 
-        auto recordToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
-        recordToggle->setPosition({ 60, 40 });
-        recordToggle->toggle(g_isRecordingEnabled);
-        menu->addChild(recordToggle);
+        // 2. Status Toggler
+        createLabel("Show Status", {winSize.width / 2 - 55, winSize.height / 2 + 25});
+        auto statToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleStatus), 0.7f);
+        statToggle->setPosition({ 65, 25 });
+        statToggle->toggle(Mod::get()->getSettingValue<bool>("show-indicator"));
+        menu->addChild(statToggle);
 
-        // 2. Status Label Toggler
-        auto statusLabelTxt = CCLabelBMFont::create("Show Status", "bigFont.fnt");
-        statusLabelTxt->setScale(0.45f);
-        statusLabelTxt->setPosition(winSize.width / 2 - 50, winSize.height / 2 + 0);
-        m_mainLayer->addChild(statusLabelTxt);
+        // 3. X Offset Input
+        createLabel("X Offset", {winSize.width / 2 - 55, winSize.height / 2 - 10});
+        auto offInp = createInput("ghost-offset", {winSize.width / 2 + 65, winSize.height / 2 - 10}, 1);
+        m_mainLayer->addChild(offInp);
 
-        auto statusToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleStatus), 0.7f);
-        statusToggle->setPosition({ 60, 0 });
-        statusToggle->toggle(Mod::get()->getSettingValue<bool>("show-indicator"));
-        menu->addChild(statusToggle);
+        // 4. Opacity Input
+        createLabel("Opacity (0-100)", {winSize.width / 2 - 55, winSize.height / 2 - 45});
+        auto opInp = createInput("ghost-opacity", {winSize.width / 2 + 65, winSize.height / 2 - 45}, 2);
+        m_mainLayer->addChild(opInp);
 
-        // 3. Offset Textbox
-        auto offsetLabel = CCLabelBMFont::create("X Offset", "bigFont.fnt");
-        offsetLabel->setScale(0.45f);
-        offsetLabel->setPosition(winSize.width / 2 - 50, winSize.height / 2 - 40);
-        m_mainLayer->addChild(offsetLabel);
-
-        auto input = CCTextInputNode::create(60.f, 20.f, "0.0", "bigFont.fnt");
-        input->setLabelPlaceholderColor({ 150, 150, 150 });
-        input->setAllowedChars("0123456789.-");
-        input->setDelegate(this);
-        input->setString(std::to_string(Mod::get()->getSettingValue<double>("ghost-offset")).substr(0, 4).c_str());
-        input->setPosition(winSize.width / 2 + 60, winSize.height / 2 - 40);
-        m_mainLayer->addChild(input);
-
-        // Close Button
-        auto closeBtn = CCMenuItemSpriteExtra::create(
-            CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"),
-            this,
-            menu_selector(GhostSettingsLayer::onClose)
-        );
-        closeBtn->setPosition({ -105, 75 });
+        // Close
+        auto closeBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"), this, menu_selector(GhostSettingsLayer::onClose));
+        closeBtn->setPosition({ -115, 95 });
         menu->addChild(closeBtn);
-
-        this->setTouchEnabled(true);
-        this->setKeypadEnabled(true);
 
         return true;
     }
 
+    void createLabel(const char* text, CCPoint pos) {
+        auto lbl = CCLabelBMFont::create(text, "bigFont.fnt");
+        lbl->setScale(0.4f);
+        lbl->setPosition(pos);
+        m_mainLayer->addChild(lbl);
+    }
+
+    CCTextInputNode* createInput(std::string setting, CCPoint pos, int tag) {
+        auto input = CCTextInputNode::create(50.f, 20.f, "0", "bigFont.fnt");
+        input->setAllowedChars("0123456789.-");
+        input->setDelegate(this);
+        input->setTag(tag);
+        input->setString(std::to_string(Mod::get()->getSettingValue<double>(setting)).substr(0, 4).c_str());
+        input->setPosition(pos);
+        return input;
+    }
+
     void onToggleRecord(CCObject* sender) {
         g_isRecordingEnabled = !static_cast<CCMenuItemToggler*>(sender)->isOn();
-        if (auto pl = PlayLayer::get()) static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
+        refreshPlayLayer();
     }
 
     void onToggleStatus(CCObject* sender) {
-        bool val = !static_cast<CCMenuItemToggler*>(sender)->isOn();
-        Mod::get()->setSettingValue("show-indicator", val);
-        if (auto pl = PlayLayer::get()) static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
+        Mod::get()->setSettingValue("show-indicator", !static_cast<CCMenuItemToggler*>(sender)->isOn());
+        refreshPlayLayer();
     }
 
     void textChanged(CCTextInputNode* input) override {
         try {
             double val = std::stod(input->getString());
-            Mod::get()->setSettingValue("ghost-offset", val);
+            if (input->getTag() == 1) Mod::get()->setSettingValue("ghost-offset", val);
+            if (input->getTag() == 2) Mod::get()->setSettingValue("ghost-opacity", std::clamp(val, 0.0, 100.0));
+            refreshPlayLayer();
         } catch (...) {}
     }
 
-    void onClose(CCObject*) {
-        this->setTouchEnabled(false);
-        this->removeFromParentAndCleanup(true);
+    void refreshPlayLayer() {
+        if (auto pl = PlayLayer::get()) static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
     }
 
-    void keyBackClicked() override { onClose(nullptr); }
-
-    bool ccTouchBegan(CCTouch* touch, CCEvent* event) override { return true; }
+    void onClose(CCObject*) { this->removeFromParentAndCleanup(true); }
 };
 
 /**
@@ -238,31 +246,17 @@ public:
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
-        
         auto menu = this->getChildByID("right-button-menu");
         if (!menu) menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
-        
         if (menu) {
-            auto settingsSprite = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png");
-            settingsSprite->setScale(0.7f);
-
-            auto settingsBtn = CCMenuItemSpriteExtra::create(
-                settingsSprite,
-                this,
-                menu_selector(MyPauseLayer::onOpenCustomGhostMenu)
-            );
-            
-            settingsBtn->setID("ghost-settings-btn"_spr);
+            auto settingsBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png"), this, menu_selector(MyPauseLayer::onOpenCustomGhostMenu));
+            settingsBtn->setScale(0.7f);
             menu->addChild(settingsBtn);
-            // Coordinates as requested
             settingsBtn->setPosition({249.0f, 116.0f}); 
             menu->updateLayout();
         }
     }
-    void onOpenCustomGhostMenu(CCObject*) {
-        auto layer = GhostSettingsLayer::create();
-        CCDirector::get()->getRunningScene()->addChild(layer, 100);
-    }
+    void onOpenCustomGhostMenu(CCObject*) { GhostSettingsLayer::create()->show(); }
 };
 
 /**
@@ -274,24 +268,39 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto playLayer = typeinfo_cast<PlayLayer*>(this);
         if (!playLayer || playLayer->m_isPaused) return;
 
-        auto player = playLayer->m_player1;
+        auto p1 = playLayer->m_player1;
+        auto p2 = playLayer->m_player2;
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
 
         if (g_isRecordingEnabled) {
-            g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
+            g_currentAttemptData.push_back({ 
+                p1->getPositionX(), p1->getPositionY(),
+                p2 ? p2->getPositionX() : 0.0f, p2 ? p2->getPositionY() : 0.0f,
+                playLayer->m_isDualMode
+            });
         }
         
         myPL->m_fields->m_timeCounter += 1.0;
 
-        if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
+        if (!g_bestAttemptData.empty()) {
             double offset = Mod::get()->getSettingValue<double>("ghost-offset");
             int targetIdx = static_cast<int>(myPL->m_fields->m_timeCounter + (offset * 4.0));
 
             if (targetIdx >= 0 && targetIdx < static_cast<int>(g_bestAttemptData.size())) {
-                myPL->m_fields->m_ghostVisual->setVisible(true);
-                myPL->m_fields->m_ghostVisual->setPosition({ g_bestAttemptData[targetIdx].x, g_bestAttemptData[targetIdx].y });
+                auto& frame = g_bestAttemptData[targetIdx];
+                
+                if (myPL->m_fields->m_ghostPlayer1) {
+                    myPL->m_fields->m_ghostPlayer1->setVisible(true);
+                    myPL->m_fields->m_ghostPlayer1->setPosition({ frame.x1, frame.y1 });
+                }
+                
+                if (myPL->m_fields->m_ghostPlayer2) {
+                    myPL->m_fields->m_ghostPlayer2->setVisible(frame.isDual);
+                    myPL->m_fields->m_ghostPlayer2->setPosition({ frame.x2, frame.y2 });
+                }
             } else {
-                myPL->m_fields->m_ghostVisual->setVisible(false);
+                if (myPL->m_fields->m_ghostPlayer1) myPL->m_fields->m_ghostPlayer1->setVisible(false);
+                if (myPL->m_fields->m_ghostPlayer2) myPL->m_fields->m_ghostPlayer2->setVisible(false);
             }
         }
     }

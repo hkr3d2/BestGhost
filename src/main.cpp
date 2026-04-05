@@ -18,19 +18,12 @@ std::vector<GhostFrame> g_currentAttemptData;
 float g_bestXAttained = 0.0f;
 
 /**
- * Helper: Safely get the ID. User levels sometimes have their ID 
- * in m_levelID, but we must ensure it's not a local editor level (ID 0).
+ * Helper: Get the file path for a specific level's ghost
  */
-int getValidLevelID(GJGameLevel* level) {
-    if (!level) return 0;
-    int id = level->m_levelID.value();
-    return id;
-}
-
 std::filesystem::path getGhostPath(GJGameLevel* level) {
     auto ghostDir = Mod::get()->getSaveDir() / "ghosts";
     if (!std::filesystem::exists(ghostDir)) std::filesystem::create_directories(ghostDir);
-    return ghostDir / (std::to_string(getValidLevelID(level)) + ".dat");
+    return ghostDir / (std::to_string(level->m_levelID.value()) + ".dat");
 }
 
 class $modify(MyPlayLayer, PlayLayer) {
@@ -38,29 +31,23 @@ class $modify(MyPlayLayer, PlayLayer) {
         CCSprite* m_ghostVisual = nullptr;
         CCLabelBMFont* m_statusLabel = nullptr;
         size_t m_playbackIndex = 0;
-        int m_sessionAttempt = 0; 
-        bool m_isValidLevel = false;
+        bool m_hasDiedOnce = false; // The core "Calibration" flag
     };
 
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
         
-        int levelID = getValidLevelID(level);
-        
-        // Disable for Editor/ID 0
-        if (levelID <= 0) {
-            m_fields->m_isValidLevel = false;
-            return true; 
-        }
-
-        m_fields->m_isValidLevel = true;
-        m_fields->m_sessionAttempt = 1; 
-        m_fields->m_playbackIndex = 0;
+        // Reset global data for the new level entry
         g_currentAttemptData.clear(); 
         g_bestAttemptData.clear();
         g_bestXAttained = 0.0f;
+        m_fields->m_playbackIndex = 0;
+        m_fields->m_hasDiedOnce = false; 
 
-        // LOAD GHOST
+        // ID 0 Check (Editor Safety)
+        if (level->m_levelID.value() <= 0) return true;
+
+        // LOAD GHOST FROM DISK
         auto path = getGhostPath(level);
         if (std::filesystem::exists(path)) {
             std::ifstream file(path, std::ios::binary);
@@ -71,11 +58,12 @@ class $modify(MyPlayLayer, PlayLayer) {
             if (!g_bestAttemptData.empty()) g_bestXAttained = g_bestAttemptData.back().x;
         }
 
-        // UI
-        auto label = CCLabelBMFont::create("", "bigFont.fnt");
+        // STATUS LABEL
+        auto label = CCLabelBMFont::create("Calibration: Play to die...", "bigFont.fnt");
         label->setScale(0.4f);
         label->setOpacity(150);
         label->setPosition({ CCDirector::get()->getWinSize().width / 2, 40 });
+        label->setColor({ 255, 255, 100 });
         this->addChild(label, 100);
         m_fields->m_statusLabel = label;
 
@@ -90,33 +78,18 @@ class $modify(MyPlayLayer, PlayLayer) {
             if (this->m_objectLayer) this->m_objectLayer->addChild(ghost, 1000);
         }
 
-        updateStatusUI();
         return true;
-    }
-
-    void updateStatusUI() {
-        if (!m_fields->m_statusLabel || !m_fields->m_isValidLevel) return;
-        
-        if (m_fields->m_sessionAttempt == 1) {
-            m_fields->m_statusLabel->setString("Attempt 1: Calibrating...");
-            m_fields->m_statusLabel->setColor({ 255, 255, 100 });
-        } else {
-            if (g_bestAttemptData.empty()) {
-                m_fields->m_statusLabel->setString("Ghost: Recording...");
-                m_fields->m_statusLabel->setColor({ 255, 100, 100 });
-            } else {
-                m_fields->m_statusLabel->setString("Ghost: Replaying Best");
-                m_fields->m_statusLabel->setColor({ 100, 255, 255 });
-            }
-        }
     }
 
     void resetLevel() {
         PlayLayer::resetLevel();
-        if (!m_fields->m_isValidLevel) return;
+        
+        // If they died, we flip the flag to TRUE
+        // From this point forward, recording and playback are enabled
+        m_fields->m_hasDiedOnce = true;
 
-        // Save Logic (Skip Att 1)
-        if (m_fields->m_sessionAttempt > 1 && !g_currentAttemptData.empty()) {
+        // Save Logic: Only if they have already passed calibration
+        if (!g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
             if (currentMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
@@ -130,30 +103,45 @@ class $modify(MyPlayLayer, PlayLayer) {
             }
         }
 
-        m_fields->m_sessionAttempt++;
+        // Reset for the next run
         g_currentAttemptData.clear(); 
         m_fields->m_playbackIndex = 0;
         if (m_fields->m_ghostVisual) m_fields->m_ghostVisual->setVisible(false);
-        updateStatusUI();
+        
+        // Update UI
+        if (m_fields->m_statusLabel) {
+            if (g_bestAttemptData.empty()) {
+                m_fields->m_statusLabel->setString("Ghost: Recording...");
+                m_fields->m_statusLabel->setColor({ 255, 100, 100 });
+            } else {
+                m_fields->m_statusLabel->setString("Ghost: Replaying Best");
+                m_fields->m_statusLabel->setColor({ 100, 255, 255 });
+            }
+        }
     }
 };
 
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
         GJBaseGameLayer::update(dt);
+        
         auto playLayer = typeinfo_cast<PlayLayer*>(this);
         if (!playLayer || playLayer->m_isPaused) return;
-
-        auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
-        if (!myPL->m_fields->m_isValidLevel) return;
+        if (playLayer->m_level->m_levelID.value() <= 0) return;
 
         auto player = playLayer->m_player1;
         if (!player) return;
 
-        // Main Logic (Skip Att 1)
-        if (myPL->m_fields->m_sessionAttempt > 1) {
+        auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
+
+        // THE KEY CHANGE: 
+        // We only record/play if the first death has already happened.
+        if (myPL->m_fields->m_hasDiedOnce) {
+            
+            // Record
             g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
 
+            // Playback
             if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
                 size_t index = myPL->m_fields->m_playbackIndex;
                 if (index < g_bestAttemptData.size()) {

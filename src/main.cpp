@@ -18,15 +18,19 @@ std::vector<GhostFrame> g_currentAttemptData;
 float g_bestXAttained = 0.0f;
 
 /**
- * Helper: Get the file path for a specific level's ghost
+ * Helper: Safely get the ID. User levels sometimes have their ID 
+ * in m_levelID, but we must ensure it's not a local editor level (ID 0).
  */
+int getValidLevelID(GJGameLevel* level) {
+    if (!level) return 0;
+    int id = level->m_levelID.value();
+    return id;
+}
+
 std::filesystem::path getGhostPath(GJGameLevel* level) {
     auto ghostDir = Mod::get()->getSaveDir() / "ghosts";
     if (!std::filesystem::exists(ghostDir)) std::filesystem::create_directories(ghostDir);
-    
-    // Use Level ID for official levels, or the Level Name/Account ID combo for user levels if ID is weird
-    // But per your request, we strictly use ID for the filename.
-    return ghostDir / (std::to_string(level->m_levelID.value()) + ".dat");
+    return ghostDir / (std::to_string(getValidLevelID(level)) + ".dat");
 }
 
 class $modify(MyPlayLayer, PlayLayer) {
@@ -35,25 +39,28 @@ class $modify(MyPlayLayer, PlayLayer) {
         CCLabelBMFont* m_statusLabel = nullptr;
         size_t m_playbackIndex = 0;
         int m_sessionAttempt = 0; 
+        bool m_isValidLevel = false;
     };
 
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
         
-        // RESET EVERYTHING
-        g_currentAttemptData.clear(); 
-        g_bestAttemptData.clear();
-        g_bestXAttained = 0.0f;
-        m_fields->m_playbackIndex = 0;
-        m_fields->m_sessionAttempt = 1; // Force start at 1 for calibration
-
-        // --- ID 0 SAFEGUARD ---
-        if (level->m_levelID.value() == 0) {
-            log::info("Ghost: Level ID is 0. Mod disabled for this session.");
+        int levelID = getValidLevelID(level);
+        
+        // Disable for Editor/ID 0
+        if (levelID <= 0) {
+            m_fields->m_isValidLevel = false;
             return true; 
         }
 
-        // 1. LOAD GHOST FROM DISK
+        m_fields->m_isValidLevel = true;
+        m_fields->m_sessionAttempt = 1; 
+        m_fields->m_playbackIndex = 0;
+        g_currentAttemptData.clear(); 
+        g_bestAttemptData.clear();
+        g_bestXAttained = 0.0f;
+
+        // LOAD GHOST
         auto path = getGhostPath(level);
         if (std::filesystem::exists(path)) {
             std::ifstream file(path, std::ios::binary);
@@ -64,7 +71,7 @@ class $modify(MyPlayLayer, PlayLayer) {
             if (!g_bestAttemptData.empty()) g_bestXAttained = g_bestAttemptData.back().x;
         }
 
-        // 2. CREATE STATUS LABEL
+        // UI
         auto label = CCLabelBMFont::create("", "bigFont.fnt");
         label->setScale(0.4f);
         label->setOpacity(150);
@@ -72,7 +79,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         this->addChild(label, 100);
         m_fields->m_statusLabel = label;
 
-        // 3. CREATE GHOST SPRITE
+        // GHOST SPRITE
         auto ghost = CCSprite::createWithSpriteFrameName("GJ_square01_001.png"); 
         if (ghost) {
             ghost->setScale(0.6f);
@@ -88,7 +95,7 @@ class $modify(MyPlayLayer, PlayLayer) {
     }
 
     void updateStatusUI() {
-        if (!m_fields->m_statusLabel || this->m_level->m_levelID.value() == 0) return;
+        if (!m_fields->m_statusLabel || !m_fields->m_isValidLevel) return;
         
         if (m_fields->m_sessionAttempt == 1) {
             m_fields->m_statusLabel->setString("Attempt 1: Calibrating...");
@@ -106,10 +113,9 @@ class $modify(MyPlayLayer, PlayLayer) {
 
     void resetLevel() {
         PlayLayer::resetLevel();
-        
-        if (this->m_level->m_levelID.value() == 0) return;
+        if (!m_fields->m_isValidLevel) return;
 
-        // Save logic (Skip Attempt 1)
+        // Save Logic (Skip Att 1)
         if (m_fields->m_sessionAttempt > 1 && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
             if (currentMaxX > g_bestXAttained) {
@@ -128,22 +134,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         g_currentAttemptData.clear(); 
         m_fields->m_playbackIndex = 0;
         if (m_fields->m_ghostVisual) m_fields->m_ghostVisual->setVisible(false);
-        
         updateStatusUI();
-    }
-
-    void levelComplete() {
-        PlayLayer::levelComplete();
-        if (this->m_level->m_levelID.value() == 0) return;
-
-        if (m_fields->m_sessionAttempt > 1) {
-            g_bestAttemptData = g_currentAttemptData;
-            auto path = getGhostPath(this->m_level);
-            std::ofstream file(path, std::ios::binary);
-            for (auto& frame : g_bestAttemptData) {
-                file.write(reinterpret_cast<const char*>(&frame), sizeof(GhostFrame));
-            }
-        }
     }
 };
 
@@ -153,15 +144,13 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto playLayer = typeinfo_cast<PlayLayer*>(this);
         if (!playLayer || playLayer->m_isPaused) return;
 
-        // ID 0 Check
-        if (playLayer->m_level->m_levelID.value() == 0) return;
+        auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
+        if (!myPL->m_fields->m_isValidLevel) return;
 
         auto player = playLayer->m_player1;
         if (!player) return;
 
-        auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
-
-        // Skip everything if Attempt 1
+        // Main Logic (Skip Att 1)
         if (myPL->m_fields->m_sessionAttempt > 1) {
             g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
 

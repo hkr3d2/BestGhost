@@ -33,8 +33,9 @@ class $modify(MyPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
 
-        // Reset state for new level entry
+        // Force OFF when entering a level, but keep g_bestAttemptData
         g_isRecordingEnabled = false;
+        
         m_fields->m_playbackIndex = 0;
         g_currentAttemptData.clear();
 
@@ -78,7 +79,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         if (g_isRecordingEnabled && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
 
-            // Only update if we beat our previous Best X
+            // Update only if this run went further than the current best
             if (currentMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
                 g_bestAttemptData = g_currentAttemptData;
@@ -93,13 +94,13 @@ class $modify(MyPlayLayer, PlayLayer) {
 };
 
 /**
- * 2. PauseLayer Hooks - Bruteforce Button Placement
+ * 2. PauseLayer Hooks - Using the working structure with a custom offset
  */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
 
-        // Target the settings menu (bottom right usually)
+        // Using the logic that you confirmed works
         auto menu = this->getChildByID("settings-button-menu");
         if (!menu) menu = this->getChildByID("right-button-menu");
         if (!menu) menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
@@ -112,23 +113,10 @@ class $modify(MyPauseLayer, PauseLayer) {
             toggler->toggle(g_isRecordingEnabled);
             
             menu->addChild(toggler);
-            menu->updateLayout();
-        }
-    }
-            }
-        }
 
-        if (menu) {
-            auto toggler = CCMenuItemToggler::createWithStandardSprites(
-                this, menu_selector(MyPauseLayer::onToggleGhost), 0.65f
-            );
-            toggler->setID("ghost-toggle"_spr);
-            toggler->toggle(g_isRecordingEnabled);
+            // CUSTOM OFFSET: Shifted Left and Down so it doesn't overlap
+            toggler->setPosition({-40.0f, -15.0f});
             
-            menu->addChild(toggler);
-            
-            // Overlap-safe position: 40 units left of the menu origin
-            toggler->setPosition({-40.0f, 0.0f}); 
             menu->updateLayout();
         }
     }
@@ -145,7 +133,7 @@ class $modify(MyPauseLayer, PauseLayer) {
 };
 
 /**
- * 3. Update Loop
+ * 3. Physics Update Loop
  */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
@@ -158,14 +146,17 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto player = playLayer->m_player1;
         if (!player) return;
 
+        // Record 
         g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
 
+        // Playback Best Run
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
         if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
             size_t index = myPL->m_fields->m_playbackIndex;
             
             if (index < g_bestAttemptData.size()) {
                 myPL->m_fields->m_ghostVisual->setVisible(true);
+                
                 // 1 block behind on X
                 myPL->m_fields->m_ghostVisual->setPosition({ 
                     g_bestAttemptData[index].x + g_ghostXOffset, 

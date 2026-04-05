@@ -2,7 +2,6 @@
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PauseLayer.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
-#include <Geode/modify/PlayerObject.hpp>
 #include <vector>
 #include <fstream>
 #include <filesystem>
@@ -57,23 +56,6 @@ void loadGhostFile(int levelID) {
 }
 
 /**
- * PlayerObject Hooks for Absolute Invincibility
- */
-class $modify(PlayerObject) {
-    // Stop the death animation/logic entirely
-    void destroyPlayer(bool p0, GameObject* p1) {
-        if (Mod::get()->getSettingValue<bool>("spectate-mode")) return;
-        PlayerObject::destroyPlayer(p0, p1);
-    }
-
-    // Secondary death trigger
-    void playerDestroyed(bool p0) {
-        if (Mod::get()->getSettingValue<bool>("spectate-mode")) return;
-        PlayerObject::playerDestroyed(p0);
-    }
-};
-
-/**
  * PlayLayer Hooks
  */
 class $modify(MyPlayLayer, PlayLayer) {
@@ -115,14 +97,10 @@ class $modify(MyPlayLayer, PlayLayer) {
     void updateUI() {
         if (!m_fields->m_statusLabel) return;
         bool isReplay = Mod::get()->getSettingValue<bool>("replay-mode");
-        bool isSpectate = Mod::get()->getSettingValue<bool>("spectate-mode");
         
         m_fields->m_statusLabel->setVisible(Mod::get()->getSettingValue<bool>("show-indicator"));
         
-        if (isSpectate) {
-            m_fields->m_statusLabel->setString("MODE: SPECTATING");
-            m_fields->m_statusLabel->setColor({ 255, 200, 0 });
-        } else if (isReplay) {
+        if (isReplay) {
             m_fields->m_statusLabel->setString("MODE: REPLAY (NO SAVE)");
             m_fields->m_statusLabel->setColor({ 100, 255, 100 });
         } else {
@@ -134,9 +112,8 @@ class $modify(MyPlayLayer, PlayLayer) {
     void resetLevel() {
         PlayLayer::resetLevel();
         bool isReplay = Mod::get()->getSettingValue<bool>("replay-mode");
-        bool isSpectate = Mod::get()->getSettingValue<bool>("spectate-mode");
 
-        if (g_isRecordingEnabled && !isReplay && !isSpectate && !g_currentAttemptData.empty()) {
+        if (g_isRecordingEnabled && !isReplay && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
             if (currentMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
@@ -179,7 +156,7 @@ class $modify(MyPauseLayer, PauseLayer) {
 };
 
 /**
- * Update Loop & Input Management
+ * Update Loop
  */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
@@ -194,9 +171,8 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
 
         bool isReplay = Mod::get()->getSettingValue<bool>("replay-mode");
-        bool isSpectate = Mod::get()->getSettingValue<bool>("spectate-mode");
 
-        if (g_isRecordingEnabled && !isReplay && !isSpectate) {
+        if (g_isRecordingEnabled && !isReplay) {
             g_currentAttemptData.push_back({ player->getPositionX(), player->getPositionY() });
         }
         
@@ -206,15 +182,13 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
             double offsetBlocks = Mod::get()->getSettingValue<double>("ghost-offset");
             bool fixFPS = Mod::get()->getSettingValue<bool>("fix-fps-offset");
 
-            int frameShift = 0;
-            if (!isSpectate) { 
-                if (fixFPS) {
-                    float currentFPS = (dt > 0) ? (1.0f / dt) : 60.0f;
-                    float fpsRatio = currentFPS / 60.0f;
-                    frameShift = static_cast<int>(offsetBlocks * 4.0 * fpsRatio);
-                } else {
-                    frameShift = static_cast<int>(offsetBlocks * 4.0);
-                }
+            int frameShift;
+            if (fixFPS) {
+                float currentFPS = (dt > 0) ? (1.0f / dt) : 60.0f;
+                float fpsRatio = currentFPS / 60.0f;
+                frameShift = static_cast<int>(offsetBlocks * 4.0 * fpsRatio);
+            } else {
+                frameShift = static_cast<int>(offsetBlocks * 4.0);
             }
             
             int targetIdx = static_cast<int>(myPL->m_fields->m_timeCounter) + frameShift;
@@ -223,23 +197,10 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                 myPL->m_fields->m_ghostVisual->setVisible(true);
                 auto ghostPos = g_bestAttemptData[targetIdx];
                 myPL->m_fields->m_ghostVisual->setPosition({ ghostPos.x, ghostPos.y });
-
-                if (isSpectate) {
-                    // Force the player to follow the ghost perfectly
-                    player->setPosition({ ghostPos.x, ghostPos.y });
-                    // Zero out velocity to prevent collision engine from thinking we are 'ramming' into things
-                    player->m_yVelocity = 0;
-                    player->m_xVelocity = 0;
-                }
             } else {
                 myPL->m_fields->m_ghostVisual->setVisible(false);
             }
         }
-    }
-
-    void handleButton(bool down, int button, bool isPlayer1) {
-        if (Mod::get()->getSettingValue<bool>("spectate-mode")) return;
-        GJBaseGameLayer::handleButton(down, button, isPlayer1);
     }
 };
 

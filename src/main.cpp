@@ -191,9 +191,9 @@ public:
         m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 20});
         m_mainLayer->addChild(m_offsetInput);
 
-        // Styled Trash Bin (Using GJ_optionsBtn_001.png like the Pause Menu button)
+        // Styled Delete Button (Using GJ_deleteBtn_001.png, the specific red 'X' button)
         createLabel("Clear Ghost", {winSize.width / 2 - 30, winSize.height / 2 - 55});
-        auto trashBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png"), this, menu_selector(GhostSettingsLayer::onConfirmDelete));
+        auto trashBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_deleteBtn_001.png"), this, menu_selector(GhostSettingsLayer::onConfirmDelete));
         trashBtn->setPosition({ 75, -55 });
         trashBtn->setScale(0.8f);
         menu->addChild(trashBtn);

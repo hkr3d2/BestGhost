@@ -129,7 +129,6 @@ class $modify(MyPlayLayer, PlayLayer) {
 
     void resetLevel() {
         PlayLayer::resetLevel();
-        // Check if the run we just finished was a new best distance
         if (g_isRecordingEnabled && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
             if (currentMaxX > g_bestXAttained) {
@@ -140,7 +139,10 @@ class $modify(MyPlayLayer, PlayLayer) {
         }
         g_currentAttemptData.clear();
         m_fields->m_timeCounter = 0.0;
-        if (m_fields->m_ghostVisual) m_fields->m_ghostVisual->setVisible(false);
+        if (m_fields->m_ghostVisual) {
+            m_fields->m_ghostVisual->setVisible(false);
+            m_fields->m_lastGhostMode = Cube;
+        }
         updateUI();
     }
 };
@@ -176,7 +178,7 @@ public:
         bg->setPosition(winSize / 2);
         m_mainLayer->addChild(bg);
 
-        // Header Text
+        // Header Title
         auto title = CCLabelBMFont::create("Ghost Menu", "bigFont.fnt");
         title->setScale(0.7f);
         title->setPosition({ winSize.width / 2, winSize.height / 2 + 88 });
@@ -209,7 +211,7 @@ public:
         m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 20});
         m_mainLayer->addChild(m_offsetInput);
 
-        // Delete Button (Using the level delete sprite)
+        // Delete Button (Standard Level Delete Sprite)
         createLabel("Clear Ghost", {winSize.width / 2 - 30, winSize.height / 2 - 55});
         auto trashBtn = CCMenuItemSpriteExtra::create(
             CCSprite::createWithSpriteFrameName("edit_delBtnSmall_001.png"), 
@@ -242,6 +244,8 @@ public:
                     if (fs::exists(path)) fs::remove(path);
                     g_bestAttemptData.clear();
                     g_bestXAttained = 0.0f;
+                    // RESTORED: Success Notification
+                    FLAlertLayer::create("Success", "Ghost data deleted.", "OK")->show();
                 }
             }
         });
@@ -271,7 +275,8 @@ class $modify(MyPauseLayer, PauseLayer) {
             if (!settingsSprite) settingsSprite = CCSprite::create("ghost_btn.png");
 
             if (settingsSprite) {
-                settingsSprite->setScale(0.6f); // Size of the icon inside the button
+                // FIXED: Setting sprite scale here. Adjust 0.6f to your preference.
+                settingsSprite->setScale(0.6f); 
             } else {
                 settingsSprite = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png");
             }
@@ -279,7 +284,10 @@ class $modify(MyPauseLayer, PauseLayer) {
             auto settingsBtn = CCMenuItemSpriteExtra::create(settingsSprite, this, menu_selector(MyPauseLayer::onOpenCustomGhostMenu));
             menu->addChild(settingsBtn);
             settingsBtn->setPosition({249.0f, 116.0f}); 
+            
+            // This stays 1.0f so the hit-box matches the sprite size
             settingsBtn->setScale(1.0f); 
+
             menu->updateLayout();
         }
     }
@@ -299,7 +307,6 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto p = playLayer->m_player1;
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
 
-        // Record current player state
         if (g_isRecordingEnabled) {
             GhostMode currentMode = Cube;
             if (p->m_isShip) currentMode = Ship;
@@ -314,7 +321,6 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         
         myPL->m_fields->m_timeCounter += 1.0;
 
-        // Playback best attempt ghost
         if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
             double offset = Mod::get()->getSettingValue<double>("ghost-offset");
             int targetIdx = static_cast<int>(myPL->m_fields->m_timeCounter + (offset * 4.0));
@@ -328,7 +334,6 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                 g->setRotation(frame.rotation);
                 g->setScale(frame.isMini ? 0.6f : 1.0f);
 
-                // Update ghost vehicle state only if it changed
                 if (frame.mode != myPL->m_fields->m_lastGhostMode) {
                     g->toggleFlyMode(false, false); g->toggleRollMode(false, false);
                     g->toggleBirdMode(false, false); g->toggleDartMode(false, false);

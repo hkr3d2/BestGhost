@@ -163,9 +163,16 @@ public:
         if (!FLAlertLayer::init(opacity)) return false;
         auto winSize = CCDirector::get()->getWinSize();
         auto bg = CCScale9Sprite::create("GJ_square01.png");
-        bg->setContentSize({ 250, 190 });
+        bg->setContentSize({ 250, 210 }); // Slightly increased height for the title
         bg->setPosition(winSize / 2);
         m_mainLayer->addChild(bg);
+
+        // --- NEW: Add the Title Label ---
+        auto title = CCLabelBMFont::create("Ghost Menu", "bigFont.fnt");
+        title->setScale(0.7f);
+        title->setPosition({ winSize.width / 2, winSize.height / 2 + 85 });
+        m_mainLayer->addChild(title);
+        // --------------------------------
 
         auto menu = CCMenu::create();
         menu->setTouchPriority(-501); 
@@ -270,13 +277,13 @@ class $modify(MyPauseLayer, PauseLayer) {
         
         if (menu) {
             auto settingsSprite = CCSprite::create("hkr3d2.bestghost/ghost_btn.png");
-            if (!settingsSprite) settingsSprite = CCSprite::create("ghost_btn.png");
+            
+            if (!settingsSprite) {
+                settingsSprite = CCSprite::create("ghost_btn.png");
+            }
 
-            if (settingsSprite) {
-                // We scale the SPRITE directly before putting it in the button.
-                // This is more reliable for 1024px textures.
-                settingsSprite->setScale(0.06f); 
-            } else {
+            if (!settingsSprite) {
+                log::warn("BestGhost: ghost_btn.png not found, using fallback.");
                 settingsSprite = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png");
             }
 
@@ -288,9 +295,7 @@ class $modify(MyPauseLayer, PauseLayer) {
             
             menu->addChild(settingsBtn);
             settingsBtn->setPosition({249.0f, 116.0f}); 
-
-            // We set the button's internal scale to 1.0f so it uses the sprite's size
-            settingsBtn->setScale(1.25f); 
+            settingsBtn->setScale(1.25f); // Kept your confirmed scale
 
             menu->updateLayout();
         }

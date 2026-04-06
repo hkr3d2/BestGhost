@@ -25,9 +25,6 @@ std::vector<GhostFrame> g_bestAttemptData;
 std::vector<GhostFrame> g_currentAttemptData;
 float g_bestXAttained = 0.0f;
 
-/**
- * File Management
- */
 fs::path getGhostPath(int levelID) {
     auto path = Mod::get()->getSaveDir() / "ghosts";
     if (!fs::exists(path)) fs::create_directories(path);
@@ -60,14 +57,12 @@ void loadGhostFile(int levelID) {
     }
 }
 
-/**
- * PlayLayer Hooks
- */
 class $modify(MyPlayLayer, PlayLayer) {
     struct Fields {
         PlayerObject* m_ghostVisual = nullptr;
         CCLabelBMFont* m_statusLabel = nullptr;
         double m_timeCounter = 0.0;
+        GhostMode m_lastGhostMode = Cube;
     };
 
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
@@ -84,11 +79,17 @@ class $modify(MyPlayLayer, PlayLayer) {
         this->addChild(label, 100);
         m_fields->m_statusLabel = label;
 
+        // Create ghost with full player settings
         auto gm = GameManager::sharedState();
         auto ghost = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
         if (ghost) {
             ghost->setOpacity(76); 
             ghost->setVisible(false);
+            // Copy colors and glow to make it detailed
+            ghost->setColor(gm->colorForIdx(gm->m_playerColor));
+            ghost->setSecondColor(gm->colorForIdx(gm->m_playerColor2));
+            if (gm->m_playerGlow) ghost->setGlowEnabled(true);
+            
             m_fields->m_ghostVisual = ghost;
             if (this->m_objectLayer) this->m_objectLayer->addChild(ghost, 1000);
         }
@@ -121,13 +122,9 @@ class $modify(MyPlayLayer, PlayLayer) {
     }
 };
 
-/**
- * Custom Settings Menu
- */
 class GhostSettingsLayer : public FLAlertLayer, public TextInputDelegate {
 protected:
     CCTextInputNode* m_offsetInput = nullptr;
-
 public:
     static GhostSettingsLayer* create() {
         auto ret = new GhostSettingsLayer();
@@ -138,70 +135,56 @@ public:
         CC_SAFE_DELETE(ret);
         return nullptr;
     }
-
     void registerWithTouchDispatcher() override {
         CCDirector::get()->getTouchDispatcher()->addTargetedDelegate(this, -500, true);
     }
-
     bool init(int opacity) {
         if (!FLAlertLayer::init(opacity)) return false;
-
         auto winSize = CCDirector::get()->getWinSize();
         auto bg = CCScale9Sprite::create("GJ_square01.png");
         bg->setContentSize({ 250, 160 });
         bg->setPosition(winSize / 2);
         m_mainLayer->addChild(bg);
-
         auto menu = CCMenu::create();
         menu->setTouchPriority(-501); 
         m_mainLayer->addChild(menu);
-
         createLabel("Record Ghost", {winSize.width / 2 - 50, winSize.height / 2 + 40});
         auto recToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
         recToggle->setPosition({ 60, 40 });
         recToggle->toggle(g_isRecordingEnabled);
         menu->addChild(recToggle);
-
         createLabel("Show Status", {winSize.width / 2 - 50, winSize.height / 2 + 5});
         auto statToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleStatus), 0.7f);
         statToggle->setPosition({ 60, 5 });
         statToggle->toggle(Mod::get()->getSettingValue<bool>("show-indicator"));
         menu->addChild(statToggle);
-
         createLabel("X Offset", {winSize.width / 2 - 50, winSize.height / 2 - 30});
         m_offsetInput = CCTextInputNode::create(60.f, 20.f, "0", "bigFont.fnt");
         m_offsetInput->setAllowedChars("0123456789.-");
         m_offsetInput->setDelegate(this);
-        
         double val = Mod::get()->getSettingValue<double>("ghost-offset");
         m_offsetInput->setString(std::to_string(val).substr(0, 5).c_str());
         m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 30});
         m_mainLayer->addChild(m_offsetInput);
-
         auto closeBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"), this, menu_selector(GhostSettingsLayer::onClose));
         closeBtn->setPosition({ -110, 65 });
         menu->addChild(closeBtn);
-
         return true;
     }
-
     void createLabel(const char* text, CCPoint pos) {
         auto lbl = CCLabelBMFont::create(text, "bigFont.fnt");
         lbl->setScale(0.4f);
         lbl->setPosition(pos);
         m_mainLayer->addChild(lbl);
     }
-
     void onToggleRecord(CCObject* sender) {
         g_isRecordingEnabled = !static_cast<CCMenuItemToggler*>(sender)->isOn();
         refreshPlayLayer();
     }
-
     void onToggleStatus(CCObject* sender) {
         Mod::get()->setSettingValue("show-indicator", !static_cast<CCMenuItemToggler*>(sender)->isOn());
         refreshPlayLayer();
     }
-
     void textChanged(CCTextInputNode* input) override {
         std::string str = input->getString();
         if (str.empty() || str == "-" || str == ".") return;
@@ -211,11 +194,9 @@ public:
             refreshPlayLayer();
         } catch (...) {}
     }
-
     void refreshPlayLayer() {
         if (auto pl = PlayLayer::get()) static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
     }
-
     void onClose(CCObject*) {
         if (m_offsetInput) {
             m_offsetInput->setDelegate(nullptr);
@@ -223,14 +204,10 @@ public:
         }
         this->removeFromParentAndCleanup(true);
     }
-
     void keyBackClicked() override { onClose(nullptr); }
     bool ccTouchBegan(CCTouch* touch, CCEvent* event) override { return true; }
 };
 
-/**
- * PauseLayer Hook
- */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
@@ -247,9 +224,6 @@ class $modify(MyPauseLayer, PauseLayer) {
     void onOpenCustomGhostMenu(CCObject*) { GhostSettingsLayer::create()->show(); }
 };
 
-/**
- * Update Loop
- */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
         GJBaseGameLayer::update(dt);
@@ -288,19 +262,21 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                 g->setPosition({ frame.x, frame.y });
                 g->setRotation(frame.rotation);
                 
-                // Update mode flags
-                g->m_isShip = (frame.mode == Ship);
-                g->m_isBall = (frame.mode == Ball);
-                g->m_isBird = (frame.mode == Bird);
-                g->m_isDart = (frame.mode == Dart);
-                g->m_isRobot = (frame.mode == Robot);
-                g->m_isSpider = (frame.mode == Spider);
-                g->m_isSwing = (frame.mode == Swing);
-                
-                // Use updatePlayerFrame(1) to force a vehicle refresh 
-                // while avoiding the glitches caused by frame 0.
-                g->updatePlayerFrame(1);
-                
+                // If the mode changed since the last frame, force a visual update
+                if (frame.mode != myPL->m_fields->m_lastGhostMode) {
+                    g->m_isShip = (frame.mode == Ship);
+                    g->m_isBall = (frame.mode == Ball);
+                    g->m_isBird = (frame.mode == Bird);
+                    g->m_isDart = (frame.mode == Dart);
+                    g->m_isRobot = (frame.mode == Robot);
+                    g->m_isSpider = (frame.mode == Spider);
+                    g->m_isSwing = (frame.mode == Swing);
+                    
+                    // This re-evaluates the flags and changes the vehicle sprite
+                    g->updatePlayerFrame(0);
+                    myPL->m_fields->m_lastGhostMode = frame.mode;
+                }
+
                 g->update(dt);
             } else {
                 myPL->m_fields->m_ghostVisual->setVisible(false);

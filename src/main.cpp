@@ -290,7 +290,7 @@ class $modify(MyPauseLayer, PauseLayer) {
             settingsBtn->setPosition({249.0f, 116.0f}); 
 
             // Scale fixed to 0.08f to handle the 1024px source image
-            settingsBtn->setScale(0.08f); 
+            settingsBtn->setScale(0.008f); 
 
             menu->updateLayout();
         }

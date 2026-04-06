@@ -11,7 +11,8 @@ using namespace geode::prelude;
 namespace fs = std::filesystem;
 
 /**
- * DATA STRUCTURES & GLOBALS
+ * GHOST DATA STRUCTURES
+ * Defines the per-frame data stored for recording and playback.
  */
 enum GhostMode { Cube, Ship, Ball, Bird, Dart, Robot, Spider, Swing };
 
@@ -22,13 +23,15 @@ struct GhostFrame {
     bool isMini; 
 };
 
+// Global session variables
 bool g_isRecordingEnabled = false; 
 std::vector<GhostFrame> g_bestAttemptData;
 std::vector<GhostFrame> g_currentAttemptData;
 float g_bestXAttained = 0.0f;
 
 /**
- * FILE I/O SYSTEM
+ * FILE SYSTEM UTILITIES
+ * Manages saving and loading the .ghst files for each level.
  */
 fs::path getGhostFolder() {
     auto path = Mod::get()->getSaveDir() / "ghosts";
@@ -76,7 +79,8 @@ $execute {
 }
 
 /**
- * PLAYLAYER MODIFICATIONS
+ * PLAYLAYER HOOKS
+ * Initializes the ghost visual and manages recording state per attempt.
  */
 class $modify(MyPlayLayer, PlayLayer) {
     struct Fields {
@@ -94,6 +98,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         m_fields->m_timeCounter = 0.0;
         g_currentAttemptData.clear();
 
+        // Recording Status Label
         auto label = CCLabelBMFont::create("", "bigFont.fnt");
         label->setScale(0.35f);
         label->setOpacity(120);
@@ -101,6 +106,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         this->addChild(label, 100);
         m_fields->m_statusLabel = label;
 
+        // Create Ghost Player
         auto gm = GameManager::sharedState();
         auto ghost = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
         if (ghost) {
@@ -142,7 +148,8 @@ class $modify(MyPlayLayer, PlayLayer) {
 };
 
 /**
- * GHOST SETTINGS UI
+ * GHOST SETTINGS UI (Custom Popup)
+ * Allows users to toggle recording, set offsets, and delete ghosts.
  */
 class GhostSettingsLayer : public FLAlertLayer, public TextInputDelegate {
 protected:
@@ -181,6 +188,7 @@ public:
         menu->setTouchPriority(-501); 
         m_mainLayer->addChild(menu);
 
+        // Settings Labels and Controls
         createLabel("Record Ghost", {winSize.width / 2 - 50, winSize.height / 2 + 50});
         auto recToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
         recToggle->setPosition({ 60, 50 });
@@ -201,6 +209,7 @@ public:
         m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 20});
         m_mainLayer->addChild(m_offsetInput);
 
+        // CLEAR GHOST BUTTON (Using Level Delete Sprite)
         createLabel("Clear Ghost", {winSize.width / 2 - 30, winSize.height / 2 - 55});
         auto trashBtn = CCMenuItemSpriteExtra::create(
             CCSprite::createWithSpriteFrameName("edit_delBtnSmall_001.png"), 
@@ -210,6 +219,7 @@ public:
         trashBtn->setPosition({ 75, -55 });
         menu->addChild(trashBtn);
 
+        // Close Button
         auto closeBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"), this, menu_selector(GhostSettingsLayer::onClose));
         closeBtn->setPosition({ -110, 95 });
         menu->addChild(closeBtn);
@@ -249,6 +259,7 @@ public:
 
 /**
  * PAUSE LAYER HOOK
+ * Injects the custom ghost button into the pause menu.
  */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
@@ -261,7 +272,6 @@ class $modify(MyPauseLayer, PauseLayer) {
             if (!settingsSprite) settingsSprite = CCSprite::create("ghost_btn.png");
 
             if (settingsSprite) {
-                // FIXED: Resetting to 0.08f for the 1024px texture
                 settingsSprite->setScale(0.08f); 
             } else {
                 settingsSprite = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png");
@@ -279,7 +289,8 @@ class $modify(MyPauseLayer, PauseLayer) {
 };
 
 /**
- * GAME LOGIC LOOP
+ * GLOBAL UPDATE LOOP
+ * Handles recording positions and playing back the ghost frames.
  */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
@@ -290,6 +301,7 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto p = playLayer->m_player1;
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
 
+        // Recording Logic
         if (g_isRecordingEnabled) {
             GhostMode currentMode = Cube;
             if (p->m_isShip) currentMode = Ship;
@@ -304,6 +316,7 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         
         myPL->m_fields->m_timeCounter += 1.0;
 
+        // Playback Logic
         if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
             double offset = Mod::get()->getSettingValue<double>("ghost-offset");
             int targetIdx = static_cast<int>(myPL->m_fields->m_timeCounter + (offset * 4.0));

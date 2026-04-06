@@ -60,14 +60,14 @@ void loadGhostFile(int levelID) {
 }
 
 /**
- * Settings Listener: Opens folder when "open-library" is toggled in Geode menu
+ * Settings Listener: Explicitly typed as <bool> to fix compiler error
  */
 $execute {
-    listenForSettingChanges("open-library", [](bool value) {
+    listenForSettingChanges<bool>("open-library", [](bool value) {
         if (value) {
             utils::file::openFolder(getGhostFolder());
-            // Reset the toggle so it can be clicked again
-            Mod::get()->setSettingValue("open-library", false);
+            // Reset the toggle so it can be used again immediately
+            Mod::get()->setSettingValue<bool>("open-library", false);
         }
     });
 }
@@ -142,9 +142,6 @@ class $modify(MyPlayLayer, PlayLayer) {
     }
 };
 
-/**
- * Custom Settings Menu with Trash Bin
- */
 class GhostSettingsLayer : public FLAlertLayer, public TextInputDelegate {
 protected:
     CCTextInputNode* m_offsetInput = nullptr;
@@ -227,7 +224,7 @@ public:
                         if (fs::exists(path)) fs::remove(path);
                         g_bestAttemptData.clear();
                         g_bestXAttained = 0.0f;
-                        FLAlertLayer::create("Success", "Ghost deleted. Restart level to see changes.", "OK")->show();
+                        FLAlertLayer::create("Success", "Ghost deleted.", "OK")->show();
                     }
                 }
             }

@@ -105,10 +105,10 @@ class $modify(MyPlayLayer, PlayLayer) {
 
     void updateUI() {
         if (!m_fields->m_statusLabel) return;
-        bool isRecording = Mod::get()->getSettingValue<bool>("record-ghost");
+        bool isRec = Mod::get()->getSettingValue<bool>("record-ghost");
         m_fields->m_statusLabel->setVisible(Mod::get()->getSettingValue<bool>("show-indicator"));
-        m_fields->m_statusLabel->setString(isRecording ? "BestGhost: RECORDING" : "BestGhost: OFF");
-        m_fields->m_statusLabel->setColor(isRecording ? ccColor3B{0, 255, 255} : ccColor3B{200, 200, 200});
+        m_fields->m_statusLabel->setString(isRec ? "BestGhost: RECORDING" : "BestGhost: OFF");
+        m_fields->m_statusLabel->setColor(isRec ? ccColor3B{0, 255, 255} : ccColor3B{200, 200, 200});
     }
 
     void resetLevel() {
@@ -160,7 +160,7 @@ public:
         if (!FLAlertLayer::init(opacity)) return false;
         auto winSize = CCDirector::get()->getWinSize();
         auto bg = CCScale9Sprite::create("GJ_square01.png");
-        bg->setContentSize({ 260, 210 });
+        bg->setContentSize({ 250, 190 });
         bg->setPosition(winSize / 2);
         m_mainLayer->addChild(bg);
 
@@ -168,46 +168,35 @@ public:
         menu->setTouchPriority(-501); 
         m_mainLayer->addChild(menu);
 
-        // Recording Toggle
-        createLabel("Record Ghost", {winSize.width / 2 - 50, winSize.height / 2 + 65});
+        createLabel("Record Ghost", {winSize.width / 2 - 50, winSize.height / 2 + 50});
         auto recToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
-        recToggle->setPosition({ 60, 65 });
+        recToggle->setPosition({ 60, 50 });
         recToggle->toggle(Mod::get()->getSettingValue<bool>("record-ghost"));
         menu->addChild(recToggle);
 
-        // Status Toggle
-        createLabel("Show Status", {winSize.width / 2 - 50, winSize.height / 2 + 30});
+        createLabel("Show Status", {winSize.width / 2 - 50, winSize.height / 2 + 15});
         auto statToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleStatus), 0.7f);
-        statToggle->setPosition({ 60, 30 });
+        statToggle->setPosition({ 60, 15 });
         statToggle->toggle(Mod::get()->getSettingValue<bool>("show-indicator"));
         menu->addChild(statToggle);
 
-        // X Offset Input
-        createLabel("X Offset", {winSize.width / 2 - 50, winSize.height / 2 - 5});
+        createLabel("X Offset", {winSize.width / 2 - 50, winSize.height / 2 - 20});
         m_offsetInput = CCTextInputNode::create(60.f, 20.f, "0", "bigFont.fnt");
         m_offsetInput->setAllowedChars("0123456789.-");
         m_offsetInput->setDelegate(this);
         m_offsetInput->setString(std::to_string(Mod::get()->getSettingValue<double>("ghost-offset")).substr(0, 5).c_str());
-        m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 5});
+        m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 20});
         m_mainLayer->addChild(m_offsetInput);
 
-        // Delete Ghost UI with decorated button
-        createLabel("Delete Ghost", {winSize.width / 2 - 30, winSize.height / 2 - 50});
-        
-        // Creating a circular background like the close button
-        auto trashCircle = CCSprite::createWithSpriteFrameName("GJ_button_01.png"); // Green circle base
-        trashCircle->setScale(0.55f);
-        auto trashIcon = CCSprite::createWithSpriteFrameName("edit_delBtn_001.png");
-        trashIcon->setPosition(trashCircle->getContentSize() / 2);
-        trashCircle->addChild(trashIcon);
-        
-        auto trashBtn = CCMenuItemSpriteExtra::create(trashCircle, this, menu_selector(GhostSettingsLayer::onConfirmDelete));
-        trashBtn->setPosition({ 75, -50 });
+        // Simple Trash Bin
+        createLabel("Clear Ghost", {winSize.width / 2 - 30, winSize.height / 2 - 55});
+        auto trashBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("edit_delBtn_001.png"), this, menu_selector(GhostSettingsLayer::onConfirmDelete));
+        trashBtn->setPosition({ 75, -55 });
+        trashBtn->setScale(0.8f);
         menu->addChild(trashBtn);
 
-        // Close Button
         auto closeBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"), this, menu_selector(GhostSettingsLayer::onClose));
-        closeBtn->setPosition({ -115, 90 });
+        closeBtn->setPosition({ -110, 80 });
         menu->addChild(closeBtn);
 
         return true;
@@ -239,29 +228,23 @@ public:
         );
     }
 
-    // Use simple global toggle logic to prevent loop
     void onToggleRecord(CCObject* sender) {
         bool current = Mod::get()->getSettingValue<bool>("record-ghost");
         Mod::get()->setSettingValue("record-ghost", !current);
-        refreshPlayLayer();
+        if (auto pl = PlayLayer::get()) static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
     }
 
     void onToggleStatus(CCObject* sender) {
         bool current = Mod::get()->getSettingValue<bool>("show-indicator");
         Mod::get()->setSettingValue("show-indicator", !current);
-        refreshPlayLayer();
+        if (auto pl = PlayLayer::get()) static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
     }
 
     void textChanged(CCTextInputNode* input) override {
         try {
             double val = std::stod(input->getString());
             Mod::get()->setSettingValue("ghost-offset", val);
-            refreshPlayLayer();
         } catch (...) {}
-    }
-
-    void refreshPlayLayer() {
-        if (auto pl = PlayLayer::get()) static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
     }
 
     void onClose(CCObject*) {

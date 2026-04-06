@@ -12,7 +12,6 @@ namespace fs = std::filesystem;
 
 /**
  * GHOST DATA STRUCTURES
- * Defines the per-frame data stored for recording and playback.
  */
 enum GhostMode { Cube, Ship, Ball, Bird, Dart, Robot, Spider, Swing };
 
@@ -23,7 +22,6 @@ struct GhostFrame {
     bool isMini; 
 };
 
-// Global session variables
 bool g_isRecordingEnabled = false; 
 std::vector<GhostFrame> g_bestAttemptData;
 std::vector<GhostFrame> g_currentAttemptData;
@@ -202,14 +200,15 @@ public:
         m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 20});
         m_mainLayer->addChild(m_offsetInput);
 
-        // REPLACED: Simple trash button with the "Delete Level" X button from your photo
+        // UPDATED: Using the Large Red Delete Button (GJ_deleteBtn_001.png)
         createLabel("Clear Ghost", {winSize.width / 2 - 30, winSize.height / 2 - 55});
         auto trashBtn = CCMenuItemSpriteExtra::create(
-            CCSprite::createWithSpriteFrameName("edit_delBtnSmall_001.png"), 
+            CCSprite::createWithSpriteFrameName("GJ_deleteBtn_001.png"), 
             this, 
             menu_selector(GhostSettingsLayer::onConfirmDelete)
         );
         trashBtn->setPosition({ 75, -55 });
+        trashBtn->setScale(0.8f); // Scaled slightly to fit the menu better
         menu->addChild(trashBtn);
 
         auto closeBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"), this, menu_selector(GhostSettingsLayer::onClose));
@@ -263,7 +262,7 @@ class $modify(MyPauseLayer, PauseLayer) {
             if (!settingsSprite) settingsSprite = CCSprite::create("ghost_btn.png");
 
             if (settingsSprite) {
-                // LOCKED: Scale set to 0.08f for your 1024px image
+                // LOCKED: Keep at 0.08f as requested
                 settingsSprite->setScale(0.08f); 
             } else {
                 settingsSprite = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png");

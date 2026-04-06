@@ -290,7 +290,7 @@ class $modify(MyPauseLayer, PauseLayer) {
             settingsBtn->setPosition({249.0f, 116.0f}); 
 
             // We set the button's internal scale to 1.0f so it uses the sprite's size
-            settingsBtn->setScale(1.0f); 
+            settingsBtn->setScale(1.25f); 
 
             menu->updateLayout();
         }

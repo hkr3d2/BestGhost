@@ -87,7 +87,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         auto gm = GameManager::sharedState();
         auto ghost = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
         if (ghost) {
-            ghost->setOpacity(76); // Fixed 30%
+            ghost->setOpacity(76); 
             ghost->setVisible(false);
             m_fields->m_ghostVisual = ghost;
             if (this->m_objectLayer) this->m_objectLayer->addChild(ghost, 1000);
@@ -288,8 +288,7 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                 g->setPosition({ frame.x, frame.y });
                 g->setRotation(frame.rotation);
                 
-                // Restore the clean Cube look by simply setting flags
-                // and letting the update(dt) call handle basic animations.
+                // Update mode flags
                 g->m_isShip = (frame.mode == Ship);
                 g->m_isBall = (frame.mode == Ball);
                 g->m_isBird = (frame.mode == Bird);
@@ -297,6 +296,10 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                 g->m_isRobot = (frame.mode == Robot);
                 g->m_isSpider = (frame.mode == Spider);
                 g->m_isSwing = (frame.mode == Swing);
+                
+                // Use updatePlayerFrame(1) to force a vehicle refresh 
+                // while avoiding the glitches caused by frame 0.
+                g->updatePlayerFrame(1);
                 
                 g->update(dt);
             } else {

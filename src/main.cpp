@@ -10,6 +10,10 @@
 using namespace geode::prelude;
 namespace fs = std::filesystem;
 
+/**
+ * DATA STRUCTURES & GLOBALS
+ * Defines how we store ghost movement and the current session state.
+ */
 enum GhostMode { Cube, Ship, Ball, Bird, Dart, Robot, Spider, Swing };
 
 struct GhostFrame {
@@ -19,12 +23,15 @@ struct GhostFrame {
     bool isMini; 
 };
 
-// Global Session State
 bool g_isRecordingEnabled = false; 
-std::vector<GhostFrame> g_bestAttemptData;
-std::vector<GhostFrame> g_currentAttemptData;
-float g_bestXAttained = 0.0f;
+std::vector<GhostFrame> g_bestAttemptData;    // Loaded from file
+std::vector<GhostFrame> g_currentAttemptData; // Currently recording
+float g_bestXAttained = 0.0f;                 // Furthest distance reached
 
+/**
+ * FILE I/O SYSTEM
+ * Handles saving and loading the .ghst files in the mod's save directory.
+ */
 fs::path getGhostFolder() {
     auto path = Mod::get()->getSaveDir() / "ghosts";
     if (!fs::exists(path)) fs::create_directories(path);
@@ -61,6 +68,7 @@ void loadGhostFile(int levelID) {
     }
 }
 
+// Opens the ghost folder via mod settings
 $execute {
     listenForSettingChanges<bool>("open-library", [](bool value) {
         if (value) {
@@ -70,6 +78,10 @@ $execute {
     });
 }
 
+/**
+ * PLAYLAYER MODIFICATIONS
+ * Manages the ghost visual object and the on-screen status recording label.
+ */
 class $modify(MyPlayLayer, PlayLayer) {
     struct Fields {
         PlayerObject* m_ghostVisual = nullptr;
@@ -86,6 +98,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         m_fields->m_timeCounter = 0.0;
         g_currentAttemptData.clear();
 
+        // Setup the recording status text at bottom of screen
         auto label = CCLabelBMFont::create("", "bigFont.fnt");
         label->setScale(0.35f);
         label->setOpacity(120);
@@ -93,6 +106,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         this->addChild(label, 100);
         m_fields->m_statusLabel = label;
 
+        // Create the ghost player object
         auto gm = GameManager::sharedState();
         auto ghost = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
         if (ghost) {
@@ -115,6 +129,7 @@ class $modify(MyPlayLayer, PlayLayer) {
 
     void resetLevel() {
         PlayLayer::resetLevel();
+        // Check if the run we just finished was a new best distance
         if (g_isRecordingEnabled && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
             if (currentMaxX > g_bestXAttained) {
@@ -125,22 +140,15 @@ class $modify(MyPlayLayer, PlayLayer) {
         }
         g_currentAttemptData.clear();
         m_fields->m_timeCounter = 0.0;
-        if (m_fields->m_ghostVisual) {
-            m_fields->m_ghostVisual->setVisible(false);
-            m_fields->m_ghostVisual->setScale(1.0f);
-            m_fields->m_ghostVisual->toggleFlyMode(false, false);
-            m_fields->m_ghostVisual->toggleRollMode(false, false);
-            m_fields->m_ghostVisual->toggleBirdMode(false, false);
-            m_fields->m_ghostVisual->toggleDartMode(false, false);
-            m_fields->m_ghostVisual->toggleRobotMode(false, false);
-            m_fields->m_ghostVisual->toggleSpiderMode(false, false);
-            m_fields->m_ghostVisual->toggleSwingMode(false, false);
-            m_fields->m_lastGhostMode = Cube;
-        }
+        if (m_fields->m_ghostVisual) m_fields->m_ghostVisual->setVisible(false);
         updateUI();
     }
 };
 
+/**
+ * GHOST SETTINGS UI
+ * The custom popup menu for toggling recording and clearing data.
+ */
 class GhostSettingsLayer : public FLAlertLayer, public TextInputDelegate {
 protected:
     CCTextInputNode* m_offsetInput = nullptr;
@@ -162,34 +170,37 @@ public:
     bool init(int opacity) {
         if (!FLAlertLayer::init(opacity)) return false;
         auto winSize = CCDirector::get()->getWinSize();
+        
         auto bg = CCScale9Sprite::create("GJ_square01.png");
-        bg->setContentSize({ 250, 210 }); // Slightly increased height for the title
+        bg->setContentSize({ 250, 220 });
         bg->setPosition(winSize / 2);
         m_mainLayer->addChild(bg);
 
-        // --- NEW: Add the Title Label ---
+        // Header Text
         auto title = CCLabelBMFont::create("Ghost Menu", "bigFont.fnt");
         title->setScale(0.7f);
-        title->setPosition({ winSize.width / 2, winSize.height / 2 + 85 });
+        title->setPosition({ winSize.width / 2, winSize.height / 2 + 88 });
         m_mainLayer->addChild(title);
-        // --------------------------------
 
         auto menu = CCMenu::create();
         menu->setTouchPriority(-501); 
         m_mainLayer->addChild(menu);
 
+        // Recording Toggle
         createLabel("Record Ghost", {winSize.width / 2 - 50, winSize.height / 2 + 50});
         auto recToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
         recToggle->setPosition({ 60, 50 });
         recToggle->toggle(g_isRecordingEnabled);
         menu->addChild(recToggle);
 
+        // Status Label Toggle
         createLabel("Show Status", {winSize.width / 2 - 50, winSize.height / 2 + 15});
         auto statToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleStatus), 0.7f);
         statToggle->setPosition({ 60, 15 });
         statToggle->toggle(Mod::get()->getSettingValue<bool>("show-indicator"));
         menu->addChild(statToggle);
 
+        // X-Offset Input
         createLabel("X Offset", {winSize.width / 2 - 50, winSize.height / 2 - 20});
         m_offsetInput = CCTextInputNode::create(60.f, 20.f, "0", "bigFont.fnt");
         m_offsetInput->setAllowedChars("0123456789.-");
@@ -198,14 +209,19 @@ public:
         m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 20});
         m_mainLayer->addChild(m_offsetInput);
 
+        // Delete Button (Using the level delete sprite)
         createLabel("Clear Ghost", {winSize.width / 2 - 30, winSize.height / 2 - 55});
-        auto trashBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png"), this, menu_selector(GhostSettingsLayer::onConfirmDelete));
+        auto trashBtn = CCMenuItemSpriteExtra::create(
+            CCSprite::createWithSpriteFrameName("edit_delBtnSmall_001.png"), 
+            this, 
+            menu_selector(GhostSettingsLayer::onConfirmDelete)
+        );
         trashBtn->setPosition({ 75, -55 });
-        trashBtn->setScale(0.8f);
         menu->addChild(trashBtn);
 
+        // Close Button
         auto closeBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"), this, menu_selector(GhostSettingsLayer::onClose));
-        closeBtn->setPosition({ -110, 80 });
+        closeBtn->setPosition({ -110, 95 });
         menu->addChild(closeBtn);
 
         return true;
@@ -219,90 +235,61 @@ public:
     }
 
     void onConfirmDelete(CCObject*) {
-        geode::createQuickPopup(
-            "Delete Ghost",
-            "Are you sure you want to <cr>delete</c> the ghost for this level?",
-            "Cancel", "Delete",
-            [this](auto, bool btn2) {
-                if (btn2) {
-                    if (auto pl = PlayLayer::get()) {
-                        auto path = getGhostPath(pl->m_level->m_levelID.value());
-                        if (fs::exists(path)) fs::remove(path);
-                        g_bestAttemptData.clear();
-                        g_bestXAttained = 0.0f;
-                        FLAlertLayer::create("Success", "Ghost deleted.", "OK")->show();
-                    }
+        geode::createQuickPopup("Delete Ghost", "Clear best attempt for this level?", "Cancel", "Delete", [this](auto, bool btn2) {
+            if (btn2) {
+                if (auto pl = PlayLayer::get()) {
+                    auto path = getGhostPath(pl->m_level->m_levelID.value());
+                    if (fs::exists(path)) fs::remove(path);
+                    g_bestAttemptData.clear();
+                    g_bestXAttained = 0.0f;
                 }
             }
-        );
+        });
     }
 
-    void onToggleRecord(CCObject* sender) {
-        g_isRecordingEnabled = !static_cast<CCMenuItemToggler*>(sender)->isOn();
-        refreshPlayLayer();
-    }
-
-    void onToggleStatus(CCObject* sender) {
-        Mod::get()->setSettingValue("show-indicator", !static_cast<CCMenuItemToggler*>(sender)->isOn());
-        refreshPlayLayer();
-    }
-
-    void textChanged(CCTextInputNode* input) override {
-        try {
-            double val = std::stod(input->getString());
-            Mod::get()->setSettingValue("ghost-offset", val);
-            refreshPlayLayer();
-        } catch (...) {}
-    }
-
-    void refreshPlayLayer() {
-        if (auto pl = PlayLayer::get()) static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
-    }
-
-    void onClose(CCObject*) {
-        if (m_offsetInput) m_offsetInput->setDelegate(nullptr);
-        this->removeFromParentAndCleanup(true);
-    }
-
+    void onToggleRecord(CCObject* sender) { g_isRecordingEnabled = !static_cast<CCMenuItemToggler*>(sender)->isOn(); refreshPlayLayer(); }
+    void onToggleStatus(CCObject* sender) { Mod::get()->setSettingValue("show-indicator", !static_cast<CCMenuItemToggler*>(sender)->isOn()); refreshPlayLayer(); }
+    void textChanged(CCTextInputNode* input) override { try { Mod::get()->setSettingValue("ghost-offset", std::stod(input->getString())); refreshPlayLayer(); } catch (...) {} }
+    void refreshPlayLayer() { if (auto pl = PlayLayer::get()) static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI(); }
+    void onClose(CCObject*) { if (m_offsetInput) m_offsetInput->setDelegate(nullptr); this->removeFromParentAndCleanup(true); }
     void keyBackClicked() override { onClose(nullptr); }
     bool ccTouchBegan(CCTouch* touch, CCEvent* event) override { return true; }
 };
 
+/**
+ * PAUSE LAYER HOOK
+ * Injects our custom Ghost Menu button into the Right Button Menu.
+ */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
-        
         auto menu = this->getChildByID("right-button-menu");
         if (!menu) menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
         
         if (menu) {
             auto settingsSprite = CCSprite::create("hkr3d2.bestghost/ghost_btn.png");
-            
-            if (!settingsSprite) {
-                settingsSprite = CCSprite::create("ghost_btn.png");
-            }
+            if (!settingsSprite) settingsSprite = CCSprite::create("ghost_btn.png");
 
-            if (!settingsSprite) {
-                log::warn("BestGhost: ghost_btn.png not found, using fallback.");
+            if (settingsSprite) {
+                settingsSprite->setScale(0.6f); // Size of the icon inside the button
+            } else {
                 settingsSprite = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png");
             }
 
-            auto settingsBtn = CCMenuItemSpriteExtra::create(
-                settingsSprite, 
-                this, 
-                menu_selector(MyPauseLayer::onOpenCustomGhostMenu)
-            );
-            
+            auto settingsBtn = CCMenuItemSpriteExtra::create(settingsSprite, this, menu_selector(MyPauseLayer::onOpenCustomGhostMenu));
             menu->addChild(settingsBtn);
             settingsBtn->setPosition({249.0f, 116.0f}); 
-            settingsBtn->setScale(1.25f); // Kept your confirmed scale
-
+            settingsBtn->setScale(1.0f); 
             menu->updateLayout();
         }
     }
     void onOpenCustomGhostMenu(CCObject*) { GhostSettingsLayer::create()->show(); }
 };
 
+/**
+ * GAME LOGIC LOOP
+ * Handles the frame-by-frame recording and playback logic.
+ */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
         GJBaseGameLayer::update(dt);
@@ -312,6 +299,7 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto p = playLayer->m_player1;
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
 
+        // Record current player state
         if (g_isRecordingEnabled) {
             GhostMode currentMode = Cube;
             if (p->m_isShip) currentMode = Ship;
@@ -321,13 +309,12 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
             else if (p->m_isRobot) currentMode = Robot;
             else if (p->m_isSpider) currentMode = Spider;
             else if (p->m_isSwing) currentMode = Swing;
-
-            bool miniState = (p->m_vehicleSize < 1.0f);
-            g_currentAttemptData.push_back({ p->getPositionX(), p->getPositionY(), p->getRotation(), currentMode, miniState });
+            g_currentAttemptData.push_back({ p->getPositionX(), p->getPositionY(), p->getRotation(), currentMode, (p->m_vehicleSize < 1.0f) });
         }
         
         myPL->m_fields->m_timeCounter += 1.0;
 
+        // Playback best attempt ghost
         if (myPL->m_fields->m_ghostVisual && !g_bestAttemptData.empty()) {
             double offset = Mod::get()->getSettingValue<double>("ghost-offset");
             int targetIdx = static_cast<int>(myPL->m_fields->m_timeCounter + (offset * 4.0));
@@ -339,16 +326,13 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                 g->setVisible(true);
                 g->setPosition({ frame.x, frame.y });
                 g->setRotation(frame.rotation);
-                
                 g->setScale(frame.isMini ? 0.6f : 1.0f);
 
+                // Update ghost vehicle state only if it changed
                 if (frame.mode != myPL->m_fields->m_lastGhostMode) {
-                    g->toggleFlyMode(false, false);
-                    g->toggleRollMode(false, false);
-                    g->toggleBirdMode(false, false);
-                    g->toggleDartMode(false, false);
-                    g->toggleRobotMode(false, false);
-                    g->toggleSpiderMode(false, false);
+                    g->toggleFlyMode(false, false); g->toggleRollMode(false, false);
+                    g->toggleBirdMode(false, false); g->toggleDartMode(false, false);
+                    g->toggleRobotMode(false, false); g->toggleSpiderMode(false, false);
                     g->toggleSwingMode(false, false);
 
                     if (frame.mode == Ship) g->toggleFlyMode(true, true);

@@ -275,7 +275,7 @@ class $modify(MyPauseLayer, PauseLayer) {
             if (settingsSprite) {
                 // We scale the SPRITE directly before putting it in the button.
                 // This is more reliable for 1024px textures.
-                settingsSprite->setScale(0.05f); 
+                settingsSprite->setScale(0.06f); 
             } else {
                 settingsSprite = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png");
             }

@@ -19,6 +19,7 @@ struct GhostFrame {
 };
 
 // Global Session State
+bool g_isRecordingEnabled = false; 
 std::vector<GhostFrame> g_bestAttemptData;
 std::vector<GhostFrame> g_currentAttemptData;
 float g_bestXAttained = 0.0f;
@@ -59,6 +60,9 @@ void loadGhostFile(int levelID) {
     }
 }
 
+/**
+ * Settings Listener: Opens folder when "open-library" is toggled in Geode menu
+ */
 $execute {
     listenForSettingChanges<bool>("open-library", [](bool value) {
         if (value) {
@@ -80,6 +84,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
         loadGhostFile(level->m_levelID.value());
         
+        g_isRecordingEnabled = false; // Reset recording on level entry
         m_fields->m_timeCounter = 0.0;
         g_currentAttemptData.clear();
 
@@ -105,15 +110,14 @@ class $modify(MyPlayLayer, PlayLayer) {
 
     void updateUI() {
         if (!m_fields->m_statusLabel) return;
-        bool isRec = Mod::get()->getSettingValue<bool>("record-ghost");
         m_fields->m_statusLabel->setVisible(Mod::get()->getSettingValue<bool>("show-indicator"));
-        m_fields->m_statusLabel->setString(isRec ? "BestGhost: RECORDING" : "BestGhost: OFF");
-        m_fields->m_statusLabel->setColor(isRec ? ccColor3B{0, 255, 255} : ccColor3B{200, 200, 200});
+        m_fields->m_statusLabel->setString(g_isRecordingEnabled ? "BestGhost: RECORDING" : "BestGhost: OFF");
+        m_fields->m_statusLabel->setColor(g_isRecordingEnabled ? ccColor3B{0, 255, 255} : ccColor3B{200, 200, 200});
     }
 
     void resetLevel() {
         PlayLayer::resetLevel();
-        if (Mod::get()->getSettingValue<bool>("record-ghost") && !g_currentAttemptData.empty()) {
+        if (g_isRecordingEnabled && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
             if (currentMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
@@ -168,18 +172,21 @@ public:
         menu->setTouchPriority(-501); 
         m_mainLayer->addChild(menu);
 
+        // Record Toggle - Using the logic that "just works"
         createLabel("Record Ghost", {winSize.width / 2 - 50, winSize.height / 2 + 50});
         auto recToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
         recToggle->setPosition({ 60, 50 });
-        recToggle->toggle(Mod::get()->getSettingValue<bool>("record-ghost"));
+        recToggle->toggle(g_isRecordingEnabled);
         menu->addChild(recToggle);
 
+        // Status Toggle
         createLabel("Show Status", {winSize.width / 2 - 50, winSize.height / 2 + 15});
         auto statToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleStatus), 0.7f);
         statToggle->setPosition({ 60, 15 });
         statToggle->toggle(Mod::get()->getSettingValue<bool>("show-indicator"));
         menu->addChild(statToggle);
 
+        // Offset Input
         createLabel("X Offset", {winSize.width / 2 - 50, winSize.height / 2 - 20});
         m_offsetInput = CCTextInputNode::create(60.f, 20.f, "0", "bigFont.fnt");
         m_offsetInput->setAllowedChars("0123456789.-");
@@ -188,7 +195,7 @@ public:
         m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 20});
         m_mainLayer->addChild(m_offsetInput);
 
-        // Simple Trash Bin
+        // Trash Bin
         createLabel("Clear Ghost", {winSize.width / 2 - 30, winSize.height / 2 - 55});
         auto trashBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("edit_delBtn_001.png"), this, menu_selector(GhostSettingsLayer::onConfirmDelete));
         trashBtn->setPosition({ 75, -55 });
@@ -229,22 +236,25 @@ public:
     }
 
     void onToggleRecord(CCObject* sender) {
-        bool current = Mod::get()->getSettingValue<bool>("record-ghost");
-        Mod::get()->setSettingValue("record-ghost", !current);
-        if (auto pl = PlayLayer::get()) static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
+        g_isRecordingEnabled = !static_cast<CCMenuItemToggler*>(sender)->isOn();
+        refreshPlayLayer();
     }
 
     void onToggleStatus(CCObject* sender) {
-        bool current = Mod::get()->getSettingValue<bool>("show-indicator");
-        Mod::get()->setSettingValue("show-indicator", !current);
-        if (auto pl = PlayLayer::get()) static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
+        Mod::get()->setSettingValue("show-indicator", !static_cast<CCMenuItemToggler*>(sender)->isOn());
+        refreshPlayLayer();
     }
 
     void textChanged(CCTextInputNode* input) override {
         try {
             double val = std::stod(input->getString());
             Mod::get()->setSettingValue("ghost-offset", val);
+            refreshPlayLayer();
         } catch (...) {}
+    }
+
+    void refreshPlayLayer() {
+        if (auto pl = PlayLayer::get()) static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
     }
 
     void onClose(CCObject*) {
@@ -281,7 +291,7 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto p = playLayer->m_player1;
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
 
-        if (Mod::get()->getSettingValue<bool>("record-ghost")) {
+        if (g_isRecordingEnabled) {
             GhostMode currentMode = Cube;
             if (p->m_isShip) currentMode = Ship;
             else if (p->m_isBall) currentMode = Ball;

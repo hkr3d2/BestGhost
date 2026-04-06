@@ -11,7 +11,7 @@
     "version": "1.0.0",
     "developer": "hkr3d2",
     "description": "Race against your personal best ghosts in Geometry Dash",
-    "tags": ["gameplay", "practice"],
+    "tags": ["gameplay", "interface", "offline"],
     "dependencies": {},
    "settings": {
        "ghost-recording": {

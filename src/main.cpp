@@ -13,7 +13,8 @@ namespace fs = std::filesystem;
 enum GhostMode { Cube, Ship, Ball, Bird, Dart, Robot, Spider, Swing };
 
 struct GhostFrame {
-    float x;    float y;
+    float x;
+    float y;
     float rotation;
     GhostMode mode;
 };
@@ -23,10 +24,14 @@ std::vector<GhostFrame> g_bestAttemptData;
 std::vector<GhostFrame> g_currentAttemptData;
 float g_bestXAttained = 0.0f;
 
-fs::path getGhostPath(int levelID) {
+fs::path getGhostFolder() {
     auto path = Mod::get()->getSaveDir() / "ghosts";
     if (!fs::exists(path)) fs::create_directories(path);
-    return path / (std::to_string(levelID) + ".ghst");
+    return path;
+}
+
+fs::path getGhostPath(int levelID) {
+    return getGhostFolder() / (std::to_string(levelID) + ".ghst");
 }
 
 void saveGhostFile(int levelID) {
@@ -55,9 +60,6 @@ void loadGhostFile(int levelID) {
     }
 }
 
-/**
- * PlayLayer Hooks
- */
 class $modify(MyPlayLayer, PlayLayer) {
     struct Fields {
         PlayerObject* m_ghostVisual = nullptr;
@@ -103,9 +105,7 @@ class $modify(MyPlayLayer, PlayLayer) {
 
     void resetLevel() {
         PlayLayer::resetLevel();
-        bool isRecording = Mod::get()->getSettingValue<bool>("record-ghost");
-        
-        if (isRecording && !g_currentAttemptData.empty()) {
+        if (Mod::get()->getSettingValue<bool>("record-ghost") && !g_currentAttemptData.empty()) {
             float currentMaxX = g_currentAttemptData.back().x;
             if (currentMaxX > g_bestXAttained) {
                 g_bestXAttained = currentMaxX;
@@ -130,9 +130,6 @@ class $modify(MyPlayLayer, PlayLayer) {
     }
 };
 
-/**
- * Custom Settings Menu (In-Game)
- */
 class GhostSettingsLayer : public FLAlertLayer, public TextInputDelegate {
 protected:
     CCTextInputNode* m_offsetInput = nullptr;
@@ -146,88 +143,102 @@ public:
         CC_SAFE_DELETE(ret);
         return nullptr;
     }
+
     void registerWithTouchDispatcher() override {
         CCDirector::get()->getTouchDispatcher()->addTargetedDelegate(this, -500, true);
     }
+
     bool init(int opacity) {
         if (!FLAlertLayer::init(opacity)) return false;
         auto winSize = CCDirector::get()->getWinSize();
         auto bg = CCScale9Sprite::create("GJ_square01.png");
-        bg->setContentSize({ 250, 160 });
+        bg->setContentSize({ 260, 200 });
         bg->setPosition(winSize / 2);
         m_mainLayer->addChild(bg);
+
         auto menu = CCMenu::create();
         menu->setTouchPriority(-501); 
         m_mainLayer->addChild(menu);
 
-        createLabel("Record Ghost", {winSize.width / 2 - 50, winSize.height / 2 + 40});
+        // Recording Toggle
+        createLabel("Record Ghost", {winSize.width / 2 - 50, winSize.height / 2 + 60});
         auto recToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
-        recToggle->setPosition({ 60, 40 });
+        recToggle->setPosition({ 60, 60 });
         recToggle->toggle(Mod::get()->getSettingValue<bool>("record-ghost"));
         menu->addChild(recToggle);
 
-        createLabel("Show Status", {winSize.width / 2 - 50, winSize.height / 2 + 5});
+        // Status Toggle
+        createLabel("Show Status", {winSize.width / 2 - 50, winSize.height / 2 + 25});
         auto statToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleStatus), 0.7f);
-        statToggle->setPosition({ 60, 5 });
+        statToggle->setPosition({ 60, 25 });
         statToggle->toggle(Mod::get()->getSettingValue<bool>("show-indicator"));
         menu->addChild(statToggle);
 
-        createLabel("X Offset", {winSize.width / 2 - 50, winSize.height / 2 - 30});
+        // X Offset Input
+        createLabel("X Offset", {winSize.width / 2 - 50, winSize.height / 2 - 10});
         m_offsetInput = CCTextInputNode::create(60.f, 20.f, "0", "bigFont.fnt");
         m_offsetInput->setAllowedChars("0123456789.-");
         m_offsetInput->setDelegate(this);
-        double val = Mod::get()->getSettingValue<double>("ghost-offset");
-        m_offsetInput->setString(std::to_string(val).substr(0, 5).c_str());
-        m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 30});
+        m_offsetInput->setString(std::to_string(Mod::get()->getSettingValue<double>("ghost-offset")).substr(0, 5).c_str());
+        m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 10});
         m_mainLayer->addChild(m_offsetInput);
 
+        // OPEN FOLDER BUTTON (Last Attempt)
+        auto folderSprite = CCSprite::createWithSpriteFrameName("gj_folderBtn_001.png");
+        folderSprite->setScale(0.8f);
+        auto folderBtn = CCMenuItemSpriteExtra::create(folderSprite, this, menu_selector(GhostSettingsLayer::onOpenFolder));
+        folderBtn->setPosition({ 0, -65 });
+        menu->addChild(folderBtn);
+
         auto closeBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"), this, menu_selector(GhostSettingsLayer::onClose));
-        closeBtn->setPosition({ -110, 65 });
+        closeBtn->setPosition({ -115, 85 });
         menu->addChild(closeBtn);
+
         return true;
     }
+
     void createLabel(const char* text, CCPoint pos) {
         auto lbl = CCLabelBMFont::create(text, "bigFont.fnt");
         lbl->setScale(0.4f);
         lbl->setPosition(pos);
         m_mainLayer->addChild(lbl);
     }
+
+    void onOpenFolder(CCObject*) {
+        utils::file::openFolder(getGhostFolder());
+    }
+
     void onToggleRecord(CCObject* sender) {
-        bool current = Mod::get()->getSettingValue<bool>("record-ghost");
-        Mod::get()->setSettingValue("record-ghost", !current);
+        Mod::get()->setSettingValue("record-ghost", !static_cast<CCMenuItemToggler*>(sender)->isOn());
         refreshPlayLayer();
     }
+
     void onToggleStatus(CCObject* sender) {
-        bool current = Mod::get()->getSettingValue<bool>("show-indicator");
-        Mod::get()->setSettingValue("show-indicator", !current);
+        Mod::get()->setSettingValue("show-indicator", !static_cast<CCMenuItemToggler*>(sender)->isOn());
         refreshPlayLayer();
     }
+
     void textChanged(CCTextInputNode* input) override {
-        std::string str = input->getString();
-        if (str.empty() || str == "-" || str == ".") return;
         try {
-            double val = std::stod(str);
+            double val = std::stod(input->getString());
             Mod::get()->setSettingValue("ghost-offset", val);
             refreshPlayLayer();
         } catch (...) {}
     }
+
     void refreshPlayLayer() {
         if (auto pl = PlayLayer::get()) static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI();
     }
+
     void onClose(CCObject*) {
-        if (m_offsetInput) {
-            m_offsetInput->setDelegate(nullptr);
-            m_offsetInput->onClickTrackNode(false);
-        }
+        if (m_offsetInput) m_offsetInput->setDelegate(nullptr);
         this->removeFromParentAndCleanup(true);
     }
+
     void keyBackClicked() override { onClose(nullptr); }
     bool ccTouchBegan(CCTouch* touch, CCEvent* event) override { return true; }
 };
 
-/**
- * PauseLayer Hook
- */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
@@ -244,9 +255,6 @@ class $modify(MyPauseLayer, PauseLayer) {
     void onOpenCustomGhostMenu(CCObject*) { GhostSettingsLayer::create()->show(); }
 };
 
-/**
- * Update Loop
- */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
         GJBaseGameLayer::update(dt);
@@ -256,10 +264,7 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
         auto p = playLayer->m_player1;
         auto myPL = static_cast<MyPlayLayer*>(static_cast<CCNode*>(playLayer));
 
-        // SYNC: Read directly from settings instead of a loose global variable
-        bool isRecording = Mod::get()->getSettingValue<bool>("record-ghost");
-
-        if (isRecording) {
+        if (Mod::get()->getSettingValue<bool>("record-ghost")) {
             GhostMode currentMode = Cube;
             if (p->m_isShip) currentMode = Ship;
             else if (p->m_isBall) currentMode = Ball;
@@ -269,9 +274,7 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
             else if (p->m_isSpider) currentMode = Spider;
             else if (p->m_isSwing) currentMode = Swing;
 
-            g_currentAttemptData.push_back({ 
-                p->getPositionX(), p->getPositionY(), p->getRotation(), currentMode 
-            });
+            g_currentAttemptData.push_back({ p->getPositionX(), p->getPositionY(), p->getRotation(), currentMode });
         }
         
         myPL->m_fields->m_timeCounter += 1.0;

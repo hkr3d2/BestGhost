@@ -87,7 +87,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         auto gm = GameManager::sharedState();
         auto ghost = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
         if (ghost) {
-            ghost->setOpacity(76); // 30% Opacity
+            ghost->setOpacity(76); // Fixed 30%
             ghost->setVisible(false);
             m_fields->m_ghostVisual = ghost;
             if (this->m_objectLayer) this->m_objectLayer->addChild(ghost, 1000);
@@ -288,7 +288,8 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                 g->setPosition({ frame.x, frame.y });
                 g->setRotation(frame.rotation);
                 
-                // Manually set flags for the renderer
+                // Restore the clean Cube look by simply setting flags
+                // and letting the update(dt) call handle basic animations.
                 g->m_isShip = (frame.mode == Ship);
                 g->m_isBall = (frame.mode == Ball);
                 g->m_isBird = (frame.mode == Bird);
@@ -297,10 +298,6 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                 g->m_isSpider = (frame.mode == Spider);
                 g->m_isSwing = (frame.mode == Swing);
                 
-                // This refreshes the texture/sprite based on the flags above.
-                // We pass '0' because the compiler complained it was missing an int.
-                g->updatePlayerFrame(0);
-
                 g->update(dt);
             } else {
                 myPL->m_fields->m_ghostVisual->setVisible(false);

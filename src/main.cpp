@@ -79,17 +79,11 @@ class $modify(MyPlayLayer, PlayLayer) {
         this->addChild(label, 100);
         m_fields->m_statusLabel = label;
 
-        // Create ghost with full player settings
         auto gm = GameManager::sharedState();
         auto ghost = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
         if (ghost) {
             ghost->setOpacity(76); 
             ghost->setVisible(false);
-            // Copy colors and glow to make it detailed
-            ghost->setColor(gm->colorForIdx(gm->m_playerColor));
-            ghost->setSecondColor(gm->colorForIdx(gm->m_playerColor2));
-            if (gm->m_playerGlow) ghost->setGlowEnabled(true);
-            
             m_fields->m_ghostVisual = ghost;
             if (this->m_objectLayer) this->m_objectLayer->addChild(ghost, 1000);
         }
@@ -117,7 +111,10 @@ class $modify(MyPlayLayer, PlayLayer) {
         }
         g_currentAttemptData.clear();
         m_fields->m_timeCounter = 0.0;
-        if (m_fields->m_ghostVisual) m_fields->m_ghostVisual->setVisible(false);
+        if (m_fields->m_ghostVisual) {
+            m_fields->m_ghostVisual->setVisible(false);
+            m_fields->m_lastGhostMode = Cube;
+        }
         updateUI();
     }
 };
@@ -262,7 +259,6 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                 g->setPosition({ frame.x, frame.y });
                 g->setRotation(frame.rotation);
                 
-                // If the mode changed since the last frame, force a visual update
                 if (frame.mode != myPL->m_fields->m_lastGhostMode) {
                     g->m_isShip = (frame.mode == Ship);
                     g->m_isBall = (frame.mode == Ball);
@@ -272,7 +268,6 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                     g->m_isSpider = (frame.mode == Spider);
                     g->m_isSwing = (frame.mode == Swing);
                     
-                    // This re-evaluates the flags and changes the vehicle sprite
                     g->updatePlayerFrame(0);
                     myPL->m_fields->m_lastGhostMode = frame.mode;
                 }

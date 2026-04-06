@@ -16,7 +16,7 @@ struct GhostFrame {
     float x; float y;
     float rotation;
     GhostMode mode;
-    bool isMini; // Added to track mini portal state
+    bool isMini; 
 };
 
 // Global Session State
@@ -127,7 +127,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         m_fields->m_timeCounter = 0.0;
         if (m_fields->m_ghostVisual) {
             m_fields->m_ghostVisual->setVisible(false);
-            m_fields->m_ghostVisual->setScale(1.0f); // Reset scale
+            m_fields->m_ghostVisual->setScale(1.0f);
             m_fields->m_ghostVisual->toggleFlyMode(false, false);
             m_fields->m_ghostVisual->toggleRollMode(false, false);
             m_fields->m_ghostVisual->toggleBirdMode(false, false);
@@ -296,7 +296,8 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
             else if (p->m_isSpider) currentMode = Spider;
             else if (p->m_isSwing) currentMode = Swing;
 
-            g_currentAttemptData.push_back({ p->getPositionX(), p->getPositionY(), p->getRotation(), currentMode, p->m_isMini });
+            // FIXED: Using p->m_mini instead of m_isMini (based on typical Geode bindings)
+            g_currentAttemptData.push_back({ p->getPositionX(), p->getPositionY(), p->getRotation(), currentMode, p->m_mini });
         }
         
         myPL->m_fields->m_timeCounter += 1.0;
@@ -313,7 +314,7 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                 g->setPosition({ frame.x, frame.y });
                 g->setRotation(frame.rotation);
                 
-                // Set mini scale (0.6f is standard mini size in GD)
+                // standard mini scale check
                 g->setScale(frame.isMini ? 0.6f : 1.0f);
 
                 if (frame.mode != myPL->m_fields->m_lastGhostMode) {

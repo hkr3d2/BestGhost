@@ -70,9 +70,6 @@ $execute {
     });
 }
 
-/**
- * PlayLayer Hooks
- */
 class $modify(MyPlayLayer, PlayLayer) {
     struct Fields {
         PlayerObject* m_ghostVisual = nullptr;
@@ -144,9 +141,6 @@ class $modify(MyPlayLayer, PlayLayer) {
     }
 };
 
-/**
- * Custom Settings Menu
- */
 class GhostSettingsLayer : public FLAlertLayer, public TextInputDelegate {
 protected:
     CCTextInputNode* m_offsetInput = nullptr;
@@ -198,7 +192,6 @@ public:
         m_mainLayer->addChild(m_offsetInput);
 
         createLabel("Clear Ghost", {winSize.width / 2 - 30, winSize.height / 2 - 55});
-        // This button uses GJ_optionsBtn_001.png, which is consistent with styled UI
         auto trashBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png"), this, menu_selector(GhostSettingsLayer::onConfirmDelete));
         trashBtn->setPosition({ 75, -55 });
         trashBtn->setScale(0.8f);
@@ -268,9 +261,6 @@ public:
     bool ccTouchBegan(CCTouch* touch, CCEvent* event) override { return true; }
 };
 
-/**
- * PauseLayer Hook: Replaces the manual creation logic with a single sprite load
- */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
@@ -279,19 +269,29 @@ class $modify(MyPauseLayer, PauseLayer) {
         if (!menu) menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
         
         if (menu) {
-            // NEW: Creation of the button using the single provided ghost_btn.png file
-            auto settingsSprite = CCSprite::create("ghost_btn.png");
+            // Using the full Mod ID prefix ensures Geode finds the bundled resource correctly.
+            auto settingsSprite = CCSprite::create("hkr3d2.bestghost/ghost_btn.png");
             
-            // If the sprite failed to load, fall back gracefully to the standard gear.
-            if (!settingsSprite) settingsSprite = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png");
+            // If the prefixed path fails, try the direct path as a backup.
+            if (!settingsSprite) {
+                settingsSprite = CCSprite::create("ghost_btn.png");
+            }
 
-            // Creation of the actual button
-            auto settingsBtn = CCMenuItemSpriteExtra::create(settingsSprite, this, menu_selector(MyPauseLayer::onOpenCustomGhostMenu));
-            menu->addChild(settingsBtn);
+            // Final fallback to prevent white squares or crashes.
+            if (!settingsSprite) {
+                log::warn("BestGhost: ghost_btn.png not found, using fallback sprite.");
+                settingsSprite = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png");
+            }
+
+            auto settingsBtn = CCMenuItemSpriteExtra::create(
+                settingsSprite, 
+                this, 
+                menu_selector(MyPauseLayer::onOpenCustomGhostMenu)
+            );
             
-            // Set the position and set the scale so it looks like other menu icons (1.0f is standard)
+            menu->addChild(settingsBtn);
             settingsBtn->setPosition({249.0f, 116.0f}); 
-            settingsBtn->setScale(1.0f); 
+            settingsBtn->setScale(0.8f); // Adjusted to match standard button size better
 
             menu->updateLayout();
         }
@@ -299,9 +299,6 @@ class $modify(MyPauseLayer, PauseLayer) {
     void onOpenCustomGhostMenu(CCObject*) { GhostSettingsLayer::create()->show(); }
 };
 
-/**
- * Update Loop
- */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
         GJBaseGameLayer::update(dt);

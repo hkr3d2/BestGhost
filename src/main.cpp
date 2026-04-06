@@ -296,8 +296,10 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
             else if (p->m_isSpider) currentMode = Spider;
             else if (p->m_isSwing) currentMode = Swing;
 
-            // FIXED: Using p->m_mini instead of m_isMini (based on typical Geode bindings)
-            g_currentAttemptData.push_back({ p->getPositionX(), p->getPositionY(), p->getRotation(), currentMode, p->m_mini });
+            // Using the size getter which is standard in many versions of Geode for 2.2
+            bool miniState = (p->m_vehicleSize < 1.0f);
+            
+            g_currentAttemptData.push_back({ p->getPositionX(), p->getPositionY(), p->getRotation(), currentMode, miniState });
         }
         
         myPL->m_fields->m_timeCounter += 1.0;
@@ -314,7 +316,6 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                 g->setPosition({ frame.x, frame.y });
                 g->setRotation(frame.rotation);
                 
-                // standard mini scale check
                 g->setScale(frame.isMini ? 0.6f : 1.0f);
 
                 if (frame.mode != myPL->m_fields->m_lastGhostMode) {

@@ -12,7 +12,6 @@ namespace fs = std::filesystem;
 
 /**
  * DATA STRUCTURES & GLOBALS
- * Defines how we store ghost movement and the current session state.
  */
 enum GhostMode { Cube, Ship, Ball, Bird, Dart, Robot, Spider, Swing };
 
@@ -24,13 +23,12 @@ struct GhostFrame {
 };
 
 bool g_isRecordingEnabled = false; 
-std::vector<GhostFrame> g_bestAttemptData;    // Loaded from file
-std::vector<GhostFrame> g_currentAttemptData; // Currently recording
-float g_bestXAttained = 0.0f;                 // Furthest distance reached
+std::vector<GhostFrame> g_bestAttemptData;
+std::vector<GhostFrame> g_currentAttemptData;
+float g_bestXAttained = 0.0f;
 
 /**
  * FILE I/O SYSTEM
- * Handles saving and loading the .ghst files in the mod's save directory.
  */
 fs::path getGhostFolder() {
     auto path = Mod::get()->getSaveDir() / "ghosts";
@@ -68,7 +66,6 @@ void loadGhostFile(int levelID) {
     }
 }
 
-// Opens the ghost folder via mod settings
 $execute {
     listenForSettingChanges<bool>("open-library", [](bool value) {
         if (value) {
@@ -80,7 +77,6 @@ $execute {
 
 /**
  * PLAYLAYER MODIFICATIONS
- * Manages the ghost visual object and the on-screen status recording label.
  */
 class $modify(MyPlayLayer, PlayLayer) {
     struct Fields {
@@ -98,7 +94,6 @@ class $modify(MyPlayLayer, PlayLayer) {
         m_fields->m_timeCounter = 0.0;
         g_currentAttemptData.clear();
 
-        // Setup the recording status text at bottom of screen
         auto label = CCLabelBMFont::create("", "bigFont.fnt");
         label->setScale(0.35f);
         label->setOpacity(120);
@@ -106,7 +101,6 @@ class $modify(MyPlayLayer, PlayLayer) {
         this->addChild(label, 100);
         m_fields->m_statusLabel = label;
 
-        // Create the ghost player object
         auto gm = GameManager::sharedState();
         auto ghost = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
         if (ghost) {
@@ -149,7 +143,6 @@ class $modify(MyPlayLayer, PlayLayer) {
 
 /**
  * GHOST SETTINGS UI
- * The custom popup menu for toggling recording and clearing data.
  */
 class GhostSettingsLayer : public FLAlertLayer, public TextInputDelegate {
 protected:
@@ -188,21 +181,18 @@ public:
         menu->setTouchPriority(-501); 
         m_mainLayer->addChild(menu);
 
-        // Recording Toggle
         createLabel("Record Ghost", {winSize.width / 2 - 50, winSize.height / 2 + 50});
         auto recToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
         recToggle->setPosition({ 60, 50 });
         recToggle->toggle(g_isRecordingEnabled);
         menu->addChild(recToggle);
 
-        // Status Label Toggle
         createLabel("Show Status", {winSize.width / 2 - 50, winSize.height / 2 + 15});
         auto statToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleStatus), 0.7f);
         statToggle->setPosition({ 60, 15 });
         statToggle->toggle(Mod::get()->getSettingValue<bool>("show-indicator"));
         menu->addChild(statToggle);
 
-        // X-Offset Input
         createLabel("X Offset", {winSize.width / 2 - 50, winSize.height / 2 - 20});
         m_offsetInput = CCTextInputNode::create(60.f, 20.f, "0", "bigFont.fnt");
         m_offsetInput->setAllowedChars("0123456789.-");
@@ -211,7 +201,6 @@ public:
         m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 20});
         m_mainLayer->addChild(m_offsetInput);
 
-        // Delete Button (Standard Level Delete Sprite)
         createLabel("Clear Ghost", {winSize.width / 2 - 30, winSize.height / 2 - 55});
         auto trashBtn = CCMenuItemSpriteExtra::create(
             CCSprite::createWithSpriteFrameName("edit_delBtnSmall_001.png"), 
@@ -221,7 +210,6 @@ public:
         trashBtn->setPosition({ 75, -55 });
         menu->addChild(trashBtn);
 
-        // Close Button
         auto closeBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"), this, menu_selector(GhostSettingsLayer::onClose));
         closeBtn->setPosition({ -110, 95 });
         menu->addChild(closeBtn);
@@ -244,7 +232,6 @@ public:
                     if (fs::exists(path)) fs::remove(path);
                     g_bestAttemptData.clear();
                     g_bestXAttained = 0.0f;
-                    // RESTORED: Success Notification
                     FLAlertLayer::create("Success", "Ghost data deleted.", "OK")->show();
                 }
             }
@@ -262,7 +249,6 @@ public:
 
 /**
  * PAUSE LAYER HOOK
- * Injects our custom Ghost Menu button into the Right Button Menu.
  */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
@@ -275,8 +261,8 @@ class $modify(MyPauseLayer, PauseLayer) {
             if (!settingsSprite) settingsSprite = CCSprite::create("ghost_btn.png");
 
             if (settingsSprite) {
-                // FIXED: Setting sprite scale here. Adjust 0.6f to your preference.
-                settingsSprite->setScale(0.6f); 
+                // FIXED: Resetting to 0.08f for the 1024px texture
+                settingsSprite->setScale(0.08f); 
             } else {
                 settingsSprite = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png");
             }
@@ -284,8 +270,6 @@ class $modify(MyPauseLayer, PauseLayer) {
             auto settingsBtn = CCMenuItemSpriteExtra::create(settingsSprite, this, menu_selector(MyPauseLayer::onOpenCustomGhostMenu));
             menu->addChild(settingsBtn);
             settingsBtn->setPosition({249.0f, 116.0f}); 
-            
-            // This stays 1.0f so the hit-box matches the sprite size
             settingsBtn->setScale(1.0f); 
 
             menu->updateLayout();
@@ -296,7 +280,6 @@ class $modify(MyPauseLayer, PauseLayer) {
 
 /**
  * GAME LOGIC LOOP
- * Handles the frame-by-frame recording and playback logic.
  */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {

@@ -80,6 +80,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         m_fields->m_statusLabel = label;
 
         auto gm = GameManager::sharedState();
+        // Create the ghost
         auto ghost = PlayerObject::create(gm->getPlayerFrame(), gm->getPlayerShip(), this, this, true);
         if (ghost) {
             ghost->setOpacity(76); 
@@ -113,6 +114,14 @@ class $modify(MyPlayLayer, PlayLayer) {
         m_fields->m_timeCounter = 0.0;
         if (m_fields->m_ghostVisual) {
             m_fields->m_ghostVisual->setVisible(false);
+            // Revert ghost to cube on reset to prevent "stuck" vehicles
+            m_fields->m_ghostVisual->toggleFlyMode(false, false);
+            m_fields->m_ghostVisual->toggleRollMode(false, false);
+            m_fields->m_ghostVisual->toggleBirdMode(false, false);
+            m_fields->m_ghostVisual->toggleDartMode(false, false);
+            m_fields->m_ghostVisual->toggleRobotMode(false, false);
+            m_fields->m_ghostVisual->toggleSpiderMode(false, false);
+            m_fields->m_ghostVisual->toggleSwingMode(false, false);
             m_fields->m_lastGhostMode = Cube;
         }
         updateUI();
@@ -259,16 +268,26 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                 g->setPosition({ frame.x, frame.y });
                 g->setRotation(frame.rotation);
                 
+                // Real Transformation Logic using toggle functions
                 if (frame.mode != myPL->m_fields->m_lastGhostMode) {
-                    g->m_isShip = (frame.mode == Ship);
-                    g->m_isBall = (frame.mode == Ball);
-                    g->m_isBird = (frame.mode == Bird);
-                    g->m_isDart = (frame.mode == Dart);
-                    g->m_isRobot = (frame.mode == Robot);
-                    g->m_isSpider = (frame.mode == Spider);
-                    g->m_isSwing = (frame.mode == Swing);
-                    
-                    g->updatePlayerFrame(0);
+                    // Turn everything off first to be safe
+                    g->toggleFlyMode(false, false);
+                    g->toggleRollMode(false, false);
+                    g->toggleBirdMode(false, false);
+                    g->toggleDartMode(false, false);
+                    g->toggleRobotMode(false, false);
+                    g->toggleSpiderMode(false, false);
+                    g->toggleSwingMode(false, false);
+
+                    // Turn on the specific mode
+                    if (frame.mode == Ship) g->toggleFlyMode(true, true);
+                    else if (frame.mode == Ball) g->toggleRollMode(true, true);
+                    else if (frame.mode == Bird) g->toggleBirdMode(true, true);
+                    else if (frame.mode == Dart) g->toggleDartMode(true, true);
+                    else if (frame.mode == Robot) g->toggleRobotMode(true, true);
+                    else if (frame.mode == Spider) g->toggleSpiderMode(true, true);
+                    else if (frame.mode == Swing) g->toggleSwingMode(true, true);
+
                     myPL->m_fields->m_lastGhostMode = frame.mode;
                 }
 

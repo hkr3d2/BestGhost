@@ -16,6 +16,7 @@ struct GhostFrame {
     float x; float y;
     float rotation;
     GhostMode mode;
+    bool isMini; // Added to track mini portal state
 };
 
 // Global Session State
@@ -60,9 +61,6 @@ void loadGhostFile(int levelID) {
     }
 }
 
-/**
- * Settings Listener: Opens folder when "open-library" is toggled in Geode menu
- */
 $execute {
     listenForSettingChanges<bool>("open-library", [](bool value) {
         if (value) {
@@ -84,7 +82,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
         loadGhostFile(level->m_levelID.value());
         
-        g_isRecordingEnabled = false; // Reset recording on level entry
+        g_isRecordingEnabled = false; 
         m_fields->m_timeCounter = 0.0;
         g_currentAttemptData.clear();
 
@@ -129,6 +127,7 @@ class $modify(MyPlayLayer, PlayLayer) {
         m_fields->m_timeCounter = 0.0;
         if (m_fields->m_ghostVisual) {
             m_fields->m_ghostVisual->setVisible(false);
+            m_fields->m_ghostVisual->setScale(1.0f); // Reset scale
             m_fields->m_ghostVisual->toggleFlyMode(false, false);
             m_fields->m_ghostVisual->toggleRollMode(false, false);
             m_fields->m_ghostVisual->toggleBirdMode(false, false);
@@ -172,21 +171,18 @@ public:
         menu->setTouchPriority(-501); 
         m_mainLayer->addChild(menu);
 
-        // Record Toggle - Using the logic that "just works"
         createLabel("Record Ghost", {winSize.width / 2 - 50, winSize.height / 2 + 50});
         auto recToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
         recToggle->setPosition({ 60, 50 });
         recToggle->toggle(g_isRecordingEnabled);
         menu->addChild(recToggle);
 
-        // Status Toggle
         createLabel("Show Status", {winSize.width / 2 - 50, winSize.height / 2 + 15});
         auto statToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleStatus), 0.7f);
         statToggle->setPosition({ 60, 15 });
         statToggle->toggle(Mod::get()->getSettingValue<bool>("show-indicator"));
         menu->addChild(statToggle);
 
-        // Offset Input
         createLabel("X Offset", {winSize.width / 2 - 50, winSize.height / 2 - 20});
         m_offsetInput = CCTextInputNode::create(60.f, 20.f, "0", "bigFont.fnt");
         m_offsetInput->setAllowedChars("0123456789.-");
@@ -195,7 +191,6 @@ public:
         m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 20});
         m_mainLayer->addChild(m_offsetInput);
 
-        // Trash Bin
         createLabel("Clear Ghost", {winSize.width / 2 - 30, winSize.height / 2 - 55});
         auto trashBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("edit_delBtn_001.png"), this, menu_selector(GhostSettingsLayer::onConfirmDelete));
         trashBtn->setPosition({ 75, -55 });
@@ -301,7 +296,7 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
             else if (p->m_isSpider) currentMode = Spider;
             else if (p->m_isSwing) currentMode = Swing;
 
-            g_currentAttemptData.push_back({ p->getPositionX(), p->getPositionY(), p->getRotation(), currentMode });
+            g_currentAttemptData.push_back({ p->getPositionX(), p->getPositionY(), p->getRotation(), currentMode, p->m_isMini });
         }
         
         myPL->m_fields->m_timeCounter += 1.0;
@@ -318,6 +313,9 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                 g->setPosition({ frame.x, frame.y });
                 g->setRotation(frame.rotation);
                 
+                // Set mini scale (0.6f is standard mini size in GD)
+                g->setScale(frame.isMini ? 0.6f : 1.0f);
+
                 if (frame.mode != myPL->m_fields->m_lastGhostMode) {
                     g->toggleFlyMode(false, false);
                     g->toggleRollMode(false, false);

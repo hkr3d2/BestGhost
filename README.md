@@ -7,7 +7,8 @@ A mod that adds your best personal ghosts to Geometry Dash.
 ## Overview
 The Best Ghost Mod is a mod that records your best run and then replays it as a ghost, it is really fun to race against the ghost, trust me. 
 
-[Tip] If you search for Accurate Hitboxes content, then you can visit [r/AccurateHitboxesMemes on Reddit](https://www.reddit.com/r/AccurateHitboxesMemes)
+> [!TIP]
+> If you search for Accurate Hitboxes content, then you can visit [r/AccurateHitboxesMemes on Reddit](https://www.reddit.com/r/AccurateHitboxesMemes)
 
 ## Features
 The mod is really customisable and has some cool features like:

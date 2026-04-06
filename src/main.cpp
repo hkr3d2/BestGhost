@@ -13,8 +13,7 @@ namespace fs = std::filesystem;
 enum GhostMode { Cube, Ship, Ball, Bird, Dart, Robot, Spider, Swing };
 
 struct GhostFrame {
-    float x;
-    float y;
+    float x; float y;
     float rotation;
     GhostMode mode;
 };
@@ -58,6 +57,19 @@ void loadGhostFile(int levelID) {
     while (file.read(reinterpret_cast<char*>(&frame), sizeof(GhostFrame))) {
         g_bestAttemptData.push_back(frame);
     }
+}
+
+/**
+ * Settings Listener: Opens folder when "open-library" is toggled in Geode menu
+ */
+$execute {
+    listenForSettingChanges("open-library", [](bool value) {
+        if (value) {
+            utils::file::openFolder(getGhostFolder());
+            // Reset the toggle so it can be clicked again
+            Mod::get()->setSettingValue("open-library", false);
+        }
+    });
 }
 
 class $modify(MyPlayLayer, PlayLayer) {
@@ -130,6 +142,9 @@ class $modify(MyPlayLayer, PlayLayer) {
     }
 };
 
+/**
+ * Custom Settings Menu with Trash Bin
+ */
 class GhostSettingsLayer : public FLAlertLayer, public TextInputDelegate {
 protected:
     CCTextInputNode* m_offsetInput = nullptr;
@@ -160,21 +175,18 @@ public:
         menu->setTouchPriority(-501); 
         m_mainLayer->addChild(menu);
 
-        // Recording Toggle
         createLabel("Record Ghost", {winSize.width / 2 - 50, winSize.height / 2 + 60});
         auto recToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
         recToggle->setPosition({ 60, 60 });
         recToggle->toggle(Mod::get()->getSettingValue<bool>("record-ghost"));
         menu->addChild(recToggle);
 
-        // Status Toggle
         createLabel("Show Status", {winSize.width / 2 - 50, winSize.height / 2 + 25});
         auto statToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleStatus), 0.7f);
         statToggle->setPosition({ 60, 25 });
         statToggle->toggle(Mod::get()->getSettingValue<bool>("show-indicator"));
         menu->addChild(statToggle);
 
-        // X Offset Input
         createLabel("X Offset", {winSize.width / 2 - 50, winSize.height / 2 - 10});
         m_offsetInput = CCTextInputNode::create(60.f, 20.f, "0", "bigFont.fnt");
         m_offsetInput->setAllowedChars("0123456789.-");
@@ -183,12 +195,11 @@ public:
         m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 10});
         m_mainLayer->addChild(m_offsetInput);
 
-        // OPEN FOLDER BUTTON (Last Attempt)
-        auto folderSprite = CCSprite::createWithSpriteFrameName("gj_folderBtn_001.png");
-        folderSprite->setScale(0.8f);
-        auto folderBtn = CCMenuItemSpriteExtra::create(folderSprite, this, menu_selector(GhostSettingsLayer::onOpenFolder));
-        folderBtn->setPosition({ 0, -65 });
-        menu->addChild(folderBtn);
+        // TRASH BIN BUTTON
+        auto trashSprite = CCSprite::createWithSpriteFrameName("edit_delBtn_001.png");
+        auto trashBtn = CCMenuItemSpriteExtra::create(trashSprite, this, menu_selector(GhostSettingsLayer::onConfirmDelete));
+        trashBtn->setPosition({ 0, -65 });
+        menu->addChild(trashBtn);
 
         auto closeBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"), this, menu_selector(GhostSettingsLayer::onClose));
         closeBtn->setPosition({ -115, 85 });
@@ -204,8 +215,23 @@ public:
         m_mainLayer->addChild(lbl);
     }
 
-    void onOpenFolder(CCObject*) {
-        utils::file::openFolder(getGhostFolder());
+    void onConfirmDelete(CCObject*) {
+        geode::createQuickPopup(
+            "Delete Ghost",
+            "Are you sure you want to <cr>delete</c> the ghost for this level?",
+            "Cancel", "Delete",
+            [this](auto, bool btn2) {
+                if (btn2) {
+                    if (auto pl = PlayLayer::get()) {
+                        auto path = getGhostPath(pl->m_level->m_levelID.value());
+                        if (fs::exists(path)) fs::remove(path);
+                        g_bestAttemptData.clear();
+                        g_bestXAttained = 0.0f;
+                        FLAlertLayer::create("Success", "Ghost deleted. Restart level to see changes.", "OK")->show();
+                    }
+                }
+            }
+        );
     }
 
     void onToggleRecord(CCObject* sender) {

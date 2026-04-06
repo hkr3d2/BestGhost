@@ -66,7 +66,6 @@ $execute {
     listenForSettingChanges<bool>("open-library", [](bool value) {
         if (value) {
             utils::file::openFolder(getGhostFolder());
-            // Reset the toggle so it can be used again immediately
             Mod::get()->setSettingValue<bool>("open-library", false);
         }
     });
@@ -164,7 +163,7 @@ public:
         if (!FLAlertLayer::init(opacity)) return false;
         auto winSize = CCDirector::get()->getWinSize();
         auto bg = CCScale9Sprite::create("GJ_square01.png");
-        bg->setContentSize({ 260, 200 });
+        bg->setContentSize({ 260, 210 });
         bg->setPosition(winSize / 2);
         m_mainLayer->addChild(bg);
 
@@ -172,34 +171,38 @@ public:
         menu->setTouchPriority(-501); 
         m_mainLayer->addChild(menu);
 
-        createLabel("Record Ghost", {winSize.width / 2 - 50, winSize.height / 2 + 60});
+        // Toggles
+        createLabel("Record Ghost", {winSize.width / 2 - 50, winSize.height / 2 + 65});
         auto recToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
-        recToggle->setPosition({ 60, 60 });
+        recToggle->setPosition({ 60, 65 });
         recToggle->toggle(Mod::get()->getSettingValue<bool>("record-ghost"));
         menu->addChild(recToggle);
 
-        createLabel("Show Status", {winSize.width / 2 - 50, winSize.height / 2 + 25});
+        createLabel("Show Status", {winSize.width / 2 - 50, winSize.height / 2 + 30});
         auto statToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleStatus), 0.7f);
-        statToggle->setPosition({ 60, 25 });
+        statToggle->setPosition({ 60, 30 });
         statToggle->toggle(Mod::get()->getSettingValue<bool>("show-indicator"));
         menu->addChild(statToggle);
 
-        createLabel("X Offset", {winSize.width / 2 - 50, winSize.height / 2 - 10});
+        // Input
+        createLabel("X Offset", {winSize.width / 2 - 50, winSize.height / 2 - 5});
         m_offsetInput = CCTextInputNode::create(60.f, 20.f, "0", "bigFont.fnt");
         m_offsetInput->setAllowedChars("0123456789.-");
         m_offsetInput->setDelegate(this);
         m_offsetInput->setString(std::to_string(Mod::get()->getSettingValue<double>("ghost-offset")).substr(0, 5).c_str());
-        m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 10});
+        m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 5});
         m_mainLayer->addChild(m_offsetInput);
 
-        // TRASH BIN BUTTON
+        // Delete Ghost UI
+        createLabel("Delete Ghost", {winSize.width / 2 - 30, winSize.height / 2 - 50});
         auto trashSprite = CCSprite::createWithSpriteFrameName("edit_delBtn_001.png");
+        trashSprite->setScale(0.7f);
         auto trashBtn = CCMenuItemSpriteExtra::create(trashSprite, this, menu_selector(GhostSettingsLayer::onConfirmDelete));
-        trashBtn->setPosition({ 0, -65 });
+        trashBtn->setPosition({ 75, -50 });
         menu->addChild(trashBtn);
 
         auto closeBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"), this, menu_selector(GhostSettingsLayer::onClose));
-        closeBtn->setPosition({ -115, 85 });
+        closeBtn->setPosition({ -115, 90 });
         menu->addChild(closeBtn);
 
         return true;
@@ -232,12 +235,14 @@ public:
     }
 
     void onToggleRecord(CCObject* sender) {
-        Mod::get()->setSettingValue("record-ghost", !static_cast<CCMenuItemToggler*>(sender)->isOn());
+        auto toggle = static_cast<CCMenuItemToggler*>(sender);
+        Mod::get()->setSettingValue("record-ghost", !toggle->isOn());
         refreshPlayLayer();
     }
 
     void onToggleStatus(CCObject* sender) {
-        Mod::get()->setSettingValue("show-indicator", !static_cast<CCMenuItemToggler*>(sender)->isOn());
+        auto toggle = static_cast<CCMenuItemToggler*>(sender);
+        Mod::get()->setSettingValue("show-indicator", !toggle->isOn());
         refreshPlayLayer();
     }
 

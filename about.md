@@ -15,6 +15,7 @@ The mod is really customisable and has some cool features like:
 - Quick Ghost clear toggle: If you want to record the ghost again, you can easily clear your current ghost in the Ghost Menu™️
 - Ghost Gamemodes and Size changes are also supported and are included in the mod.
 
+## If you found a bug or an issue with the mod, write it to the github issues from my github repository
 
 
 ### Things that i will update with future updates:

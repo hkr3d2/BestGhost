@@ -270,13 +270,13 @@ class $modify(MyPauseLayer, PauseLayer) {
         
         if (menu) {
             auto settingsSprite = CCSprite::create("hkr3d2.bestghost/ghost_btn.png");
-            
-            if (!settingsSprite) {
-                settingsSprite = CCSprite::create("ghost_btn.png");
-            }
+            if (!settingsSprite) settingsSprite = CCSprite::create("ghost_btn.png");
 
-            if (!settingsSprite) {
-                log::warn("BestGhost: ghost_btn.png not found, using fallback.");
+            if (settingsSprite) {
+                // We scale the SPRITE directly before putting it in the button.
+                // This is more reliable for 1024px textures.
+                settingsSprite->setScale(0.05f); 
+            } else {
                 settingsSprite = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png");
             }
 
@@ -289,8 +289,8 @@ class $modify(MyPauseLayer, PauseLayer) {
             menu->addChild(settingsBtn);
             settingsBtn->setPosition({249.0f, 116.0f}); 
 
-            // Scale fixed to 0.08f to handle the 1024px source image
-            settingsBtn->setScale(0.008f); 
+            // We set the button's internal scale to 1.0f so it uses the sprite's size
+            settingsBtn->setScale(1.0f); 
 
             menu->updateLayout();
         }

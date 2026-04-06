@@ -269,17 +269,14 @@ class $modify(MyPauseLayer, PauseLayer) {
         if (!menu) menu = typeinfo_cast<CCMenu*>(this->getChildByType<CCMenu>(0));
         
         if (menu) {
-            // Using the full Mod ID prefix ensures Geode finds the bundled resource correctly.
             auto settingsSprite = CCSprite::create("hkr3d2.bestghost/ghost_btn.png");
             
-            // If the prefixed path fails, try the direct path as a backup.
             if (!settingsSprite) {
                 settingsSprite = CCSprite::create("ghost_btn.png");
             }
 
-            // Final fallback to prevent white squares or crashes.
             if (!settingsSprite) {
-                log::warn("BestGhost: ghost_btn.png not found, using fallback sprite.");
+                log::warn("BestGhost: ghost_btn.png not found, using fallback.");
                 settingsSprite = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png");
             }
 
@@ -291,7 +288,9 @@ class $modify(MyPauseLayer, PauseLayer) {
             
             menu->addChild(settingsBtn);
             settingsBtn->setPosition({249.0f, 116.0f}); 
-            settingsBtn->setScale(0.8f); // Adjusted to match standard button size better
+
+            // Scale fixed to 0.08f to handle the 1024px source image
+            settingsBtn->setScale(0.08f); 
 
             menu->updateLayout();
         }

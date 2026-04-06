@@ -59,9 +59,6 @@ void loadGhostFile(int levelID) {
     }
 }
 
-/**
- * Settings Listener: Explicitly typed as <bool> to fix compiler error
- */
 $execute {
     listenForSettingChanges<bool>("open-library", [](bool value) {
         if (value) {
@@ -171,20 +168,21 @@ public:
         menu->setTouchPriority(-501); 
         m_mainLayer->addChild(menu);
 
-        // Toggles
+        // Recording Toggle
         createLabel("Record Ghost", {winSize.width / 2 - 50, winSize.height / 2 + 65});
         auto recToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleRecord), 0.7f);
         recToggle->setPosition({ 60, 65 });
         recToggle->toggle(Mod::get()->getSettingValue<bool>("record-ghost"));
         menu->addChild(recToggle);
 
+        // Status Toggle
         createLabel("Show Status", {winSize.width / 2 - 50, winSize.height / 2 + 30});
         auto statToggle = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(GhostSettingsLayer::onToggleStatus), 0.7f);
         statToggle->setPosition({ 60, 30 });
         statToggle->toggle(Mod::get()->getSettingValue<bool>("show-indicator"));
         menu->addChild(statToggle);
 
-        // Input
+        // X Offset Input
         createLabel("X Offset", {winSize.width / 2 - 50, winSize.height / 2 - 5});
         m_offsetInput = CCTextInputNode::create(60.f, 20.f, "0", "bigFont.fnt");
         m_offsetInput->setAllowedChars("0123456789.-");
@@ -193,14 +191,21 @@ public:
         m_offsetInput->setPosition({winSize.width / 2 + 60, winSize.height / 2 - 5});
         m_mainLayer->addChild(m_offsetInput);
 
-        // Delete Ghost UI
+        // Delete Ghost UI with decorated button
         createLabel("Delete Ghost", {winSize.width / 2 - 30, winSize.height / 2 - 50});
-        auto trashSprite = CCSprite::createWithSpriteFrameName("edit_delBtn_001.png");
-        trashSprite->setScale(0.7f);
-        auto trashBtn = CCMenuItemSpriteExtra::create(trashSprite, this, menu_selector(GhostSettingsLayer::onConfirmDelete));
+        
+        // Creating a circular background like the close button
+        auto trashCircle = CCSprite::createWithSpriteFrameName("GJ_button_01.png"); // Green circle base
+        trashCircle->setScale(0.55f);
+        auto trashIcon = CCSprite::createWithSpriteFrameName("edit_delBtn_001.png");
+        trashIcon->setPosition(trashCircle->getContentSize() / 2);
+        trashCircle->addChild(trashIcon);
+        
+        auto trashBtn = CCMenuItemSpriteExtra::create(trashCircle, this, menu_selector(GhostSettingsLayer::onConfirmDelete));
         trashBtn->setPosition({ 75, -50 });
         menu->addChild(trashBtn);
 
+        // Close Button
         auto closeBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"), this, menu_selector(GhostSettingsLayer::onClose));
         closeBtn->setPosition({ -115, 90 });
         menu->addChild(closeBtn);
@@ -234,15 +239,16 @@ public:
         );
     }
 
+    // Use simple global toggle logic to prevent loop
     void onToggleRecord(CCObject* sender) {
-        auto toggle = static_cast<CCMenuItemToggler*>(sender);
-        Mod::get()->setSettingValue("record-ghost", !toggle->isOn());
+        bool current = Mod::get()->getSettingValue<bool>("record-ghost");
+        Mod::get()->setSettingValue("record-ghost", !current);
         refreshPlayLayer();
     }
 
     void onToggleStatus(CCObject* sender) {
-        auto toggle = static_cast<CCMenuItemToggler*>(sender);
-        Mod::get()->setSettingValue("show-indicator", !toggle->isOn());
+        bool current = Mod::get()->getSettingValue<bool>("show-indicator");
+        Mod::get()->setSettingValue("show-indicator", !current);
         refreshPlayLayer();
     }
 

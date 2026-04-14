@@ -316,7 +316,7 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
 
         if (myPL->m_fields->m_ghostVisual && !bestTrySave.empty()) {
             double offset = Mod::get()->getSettingValue<double>("ghost-offset");
-            int targetIdx = static_cast<int>(myPL->m_fields->ghostTimer + (offset * OFFSET_SCALE));
+            int targetIdx = static_cast<int>(myPL->m_fields->ghostTimer + (offset * GHOST_OFFSET_MULTIPLIER));
 
             if (targetIdx >= 0 && targetIdx < static_cast<int>(bestTrySave.size())) {
                 auto& frame = bestTrySave[targetIdx];

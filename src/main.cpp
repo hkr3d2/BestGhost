@@ -11,7 +11,7 @@ using namespace geode::prelude;
 namespace fs = std::filesystem;
 
 /**
- * GHOST DATA STRUCTURES
+ * Ghost Gamemode
  */
 enum GhostMode { Cube, Ship, Ball, Bird, Dart, Robot, Spider, Swing };
 
@@ -28,7 +28,7 @@ std::vector<GhostFrame> g_currentAttemptData;
 float g_bestXAttained = 0.0f;
 
 /**
- * FILE SYSTEM UTILITIES
+ * Ghost save files
  */
 fs::path getGhostFolder() {
     auto path = Mod::get()->getSaveDir() / "ghosts";
@@ -66,7 +66,7 @@ void loadGhostFile(int levelID) {
     }
 }
 
-$execute {
+$execute {  // Library toggle
     listenForSettingChanges<bool>("open-library", [](bool value) {
         if (value) {
             utils::file::openFolder(getGhostFolder());
@@ -76,7 +76,7 @@ $execute {
 }
 
 /**
- * PLAYLAYER HOOKS
+ * Ghost status label
  */
 class $modify(MyPlayLayer, PlayLayer) {
     struct Fields {
@@ -142,7 +142,7 @@ class $modify(MyPlayLayer, PlayLayer) {
 };
 
 /**
- * GHOST SETTINGS UI
+ * ghost menu ui
  */
 class GhostSettingsLayer : public FLAlertLayer, public TextInputDelegate {
 protected:
@@ -248,7 +248,7 @@ public:
 };
 
 /**
- * PAUSE LAYER HOOK
+ * menu button on the pause layer
  */
 class $modify(MyPauseLayer, PauseLayer) {
     void customSetup() {
@@ -261,7 +261,6 @@ class $modify(MyPauseLayer, PauseLayer) {
             if (!settingsSprite) settingsSprite = CCSprite::create("ghost_btn.png");
 
             if (settingsSprite) {
-                // LOCKED: Keep at 0.08f as requested
                 settingsSprite->setScale(0.08f); 
             } else {
                 settingsSprite = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png");
@@ -279,7 +278,7 @@ class $modify(MyPauseLayer, PauseLayer) {
 };
 
 /**
- * GAME LOGIC LOOP
+ * Ghost replay and record logic
  */
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {

@@ -16,10 +16,11 @@ namespace fs = std::filesystem;
 enum GhostGameMode { Cube, Ship, Ball, Bird, Dart, Robot, Spider, Swing };
 
 struct GhostFrame {
-    float x; float y;
-    float rotation;
-    GhostGameMode mode;
-    bool isMiniSize; 
+    float x = 0.f;
+    float y = 0.f;
+    float rotation = 0.f;
+    GhostGameMode mode = Cube;
+    bool isMiniSize = false;
 };
 
 bool isGhostRecording = false; 
@@ -43,7 +44,10 @@ fs::path getGhostPath(int levelID) {
 void saveGhostFile(int levelID) {
     if (bestTrySave.empty()) return;
     std::ofstream file(getGhostPath(levelID), std::ios::binary);
-    if (!file.is_open()) return;
+    if (!file.is_open()) {
+    log::warn("Failed to open ghost file for writing: {}", getGhostPath(levelID).string());
+    return;
+}
     file.write(reinterpret_cast<char*>(&furthestGhost), sizeof(float));
     for (const auto& frame : bestTrySave) {
         file.write(reinterpret_cast<const char*>(&frame), sizeof(GhostFrame));
@@ -54,16 +58,22 @@ void loadGhostFile(int levelID) {
     bestTrySave.clear();
     auto path = getGhostPath(levelID);
     if (!fs::exists(path)) {
-        furthestGhost = 0.0f;
-        return;
-    }
+    furthestGhost = 0.0f;
+    bestTrySave.clear();
+    return;
+}
     std::ifstream file(path, std::ios::binary);
-    if (!file.is_open()) return;
+    if (!file.is_open()) {
+    log::warn("Failed to open ghost file for writing: {}", getGhostPath(levelID).string());
+    return;
+}
     file.read(reinterpret_cast<char*>(&furthestGhost), sizeof(float));
     GhostFrame frame;
-    while (file.read(reinterpret_cast<char*>(&frame), sizeof(GhostFrame))) {
-        bestTrySave.push_back(frame);
-    }
+while (true) {
+    file.read(reinterpret_cast<char*>(&frame), sizeof(GhostFrame));
+    if (file.gcount() != sizeof(GhostFrame)) break;
+    bestTrySave.emplace_back(frame);
+}
 }
 
 $execute {  // Library toggle
@@ -240,7 +250,7 @@ public:
 
     void onToggleRecord(CCObject* sender) { isGhostRecording = !static_cast<CCMenuItemToggler*>(sender)->isOn(); refreshPlayLayer(); }
     void onToggleStatus(CCObject* sender) { Mod::get()->setSettingValue("show-indicator", !static_cast<CCMenuItemToggler*>(sender)->isOn()); refreshPlayLayer(); }
-    void textChanged(CCTextInputNode* input) override { try { Mod::get()->setSettingValue("ghost-offset", std::stod(input->getString())); refreshPlayLayer(); } catch (...) {} }
+    void textChanged(CCTextInputNode* input) override { try { Mod::get()->setSettingValue("ghost-offset", std::stod(input->getString())); refreshPlayLayer(); } catch (const std::exception&) { log::debug("Invalid ghost offset input"); } }
     void refreshPlayLayer() { if (auto pl = PlayLayer::get()) static_cast<MyPlayLayer*>(static_cast<CCNode*>(pl))->updateUI(); }
     void onClose(CCObject*) { if (offsetTextInput) offsetTextInput->setDelegate(nullptr); this->removeFromParentAndCleanup(true); }
     void keyBackClicked() override { onClose(nullptr); }
@@ -283,6 +293,7 @@ class $modify(MyPauseLayer, PauseLayer) {
 class $modify(MyBaseGameLayer, GJBaseGameLayer) {
     void update(float dt) {
         GJBaseGameLayer::update(dt);
+        constexpr double GHOST_OFFSET_MULTIPLIER = 4.0;
         auto playLayer = typeinfo_cast<PlayLayer*>(this);
         if (!playLayer || playLayer->m_isPaused) return;
 
@@ -305,7 +316,7 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
 
         if (myPL->m_fields->m_ghostVisual && !bestTrySave.empty()) {
             double offset = Mod::get()->getSettingValue<double>("ghost-offset");
-            int targetIdx = static_cast<int>(myPL->m_fields->ghostTimer + (offset * 4.0));
+            int targetIdx = static_cast<int>(myPL->m_fields->ghostTimer + (offset * OFFSET_SCALE));
 
             if (targetIdx >= 0 && targetIdx < static_cast<int>(bestTrySave.size())) {
                 auto& frame = bestTrySave[targetIdx];
@@ -316,21 +327,28 @@ class $modify(MyBaseGameLayer, GJBaseGameLayer) {
                 g->setRotation(frame.rotation);
                 g->setScale(frame.isMiniSize ? 0.6f : 1.0f);
 
+auto applyGamemode = [&](PlayerObject* obj, GhostGameMode mode) {
+    obj->toggleFlyMode(false, false);
+    obj->toggleRollMode(false, false);
+    obj->toggleBirdMode(false, false);
+    obj->toggleDartMode(false, false);
+    obj->toggleRobotMode(false, false);
+    obj->toggleSpiderMode(false, false);
+    obj->toggleSwingMode(false, false);
+
+    switch (mode) {
+        case Ship:   obj->toggleFlyMode(true, true); break;
+        case Ball:   obj->toggleRollMode(true, true); break;
+        case Bird:   obj->toggleBirdMode(true, true); break;
+        case Dart:   obj->toggleDartMode(true, true); break;
+        case Robot:  obj->toggleRobotMode(true, true); break;
+        case Spider: obj->toggleSpiderMode(true, true); break;
+        case Swing:  obj->toggleSwingMode(true, true); break;
+        default: break;
+    }
+};
                 if (frame.mode != myPL->m_fields->lastGhostGMode) {
-                    g->toggleFlyMode(false, false); g->toggleRollMode(false, false);
-                    g->toggleBirdMode(false, false); g->toggleDartMode(false, false);
-                    g->toggleRobotMode(false, false); g->toggleSpiderMode(false, false);
-                    g->toggleSwingMode(false, false);
-
-                    if (frame.mode == Ship) g->toggleFlyMode(true, true);
-                    else if (frame.mode == Ball) g->toggleRollMode(true, true);
-                    else if (frame.mode == Bird) g->toggleBirdMode(true, true);
-                    else if (frame.mode == Dart) g->toggleDartMode(true, true);
-                    else if (frame.mode == Robot) g->toggleRobotMode(true, true);
-                    else if (frame.mode == Spider) g->toggleSpiderMode(true, true);
-                    else if (frame.mode == Swing) g->toggleSwingMode(true, true);
-
-                    myPL->m_fields->lastGhostGMode = frame.mode;
+                    applyGamemode(g, frame.mode);
                 }
                 g->update(dt);
             } else {
